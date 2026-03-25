@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 
 const transactions = [
   { id: "TX_154", date: "Mar 20, 2026", pack: "Pro Pack", amount: "$40.00", status: "success", credits: "+50,000" },

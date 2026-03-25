@@ -33,6 +33,11 @@ app.use(morgan('dev')); // Console logger
 app.use('/health', healthRoutes);
 app.use('/metrics', metricsRoutes);
 
+app.get('/robots.txt', (req, res) => {
+    res.type('text/plain');
+    res.send("User-agent: *\nAllow: /");
+});
+
 // 2. Logging & Observability (Admin Only)
 app.use('/logs', logsRoutes);
 

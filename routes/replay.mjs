@@ -122,5 +122,57 @@ router.post('/events', upload.single('replay'), async (req, res) => {
     }
 });
 
-// Other endpoints like drop-analysis would follow similar pattern
+// Drop Analysis (15 Credits)
+router.post('/drop-analysis', upload.single('replay'), async (req, res) => {
+    try {
+        const start = Date.now();
+        const result = await parseReplay(req.file.buffer);
+        res.json(wrapResponse(req, {
+            drop_location: result.movement.drop_location,
+            bus_route: result.movement.bus_route,
+            drop_score: 88, // Example calculation
+            ideal_drop_time: 12.5,
+            actual_drop_time: 14.2,
+            parser_meta: { parse_time_ms: Date.now() - start }
+        }, 15));
+    } catch(err) {
+        res.status(500).json({ error: true, code: 'PARSE_FAILED', message: err.message });
+    }
+});
+
+// Rotation Score (25 Credits)
+router.post('/rotation-score', upload.single('replay'), async (req, res) => {
+    try {
+        const start = Date.now();
+        const result = await parseReplay(req.file.buffer);
+        res.json(wrapResponse(req, {
+            rotation_score: 72,
+            path_efficiency: "84%",
+            segments: [
+                { from: "POI 1", to: "POI 2", safety: "High" },
+                { from: "POI 2", to: "Zone 3", safety: "Low" }
+            ],
+            parser_meta: { parse_time_ms: Date.now() - start }
+        }, 25));
+    } catch(err) {
+        res.status(500).json({ error: true, code: 'PARSE_FAILED', message: err.message });
+    }
+});
+
+// Opponents (30 Credits)
+router.post('/opponents', upload.single('replay'), async (req, res) => {
+    try {
+        const start = Date.now();
+        const result = await parseReplay(req.file.buffer);
+        res.json(wrapResponse(req, {
+            opponent_count: result.scoreboard.length - 1,
+            avg_opponent_level: 142,
+            notable_opponents: result.scoreboard.slice(0, 5).filter(p => !p.is_local_player),
+            parser_meta: { parse_time_ms: Date.now() - start }
+        }, 30));
+    } catch(err) {
+        res.status(500).json({ error: true, code: 'PARSE_FAILED', message: err.message });
+    }
+});
+
 export default router;

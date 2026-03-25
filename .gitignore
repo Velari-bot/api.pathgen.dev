@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.local
 
 # vercel
 .vercel
@@ -39,3 +40,22 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Allow specific json if needed, but not the huge ones.
+# parse_result.json is 110MB -- don't commit.
+# stats_result.json is small but probably temporary.
+*.json
+!package.json
+!package-lock.json
+!components.json
+!tsconfig.json
+
+# Allow public files but exclude some?
+public/
+!public/index.html
+!public/favicon.ico
+!public/file.svg
+!public/globe.svg
+!public/next.svg
+!public/vercel.svg
+!public/window.svg

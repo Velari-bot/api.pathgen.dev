@@ -1,0 +1,22 @@
+import express from 'express';
+import client from 'prom-client';
+
+const router = express.Router();
+
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
+
+// Custom metrics
+const httpRequestCounter = new client.Counter({
+    name: 'http_requests_total',
+    help: 'Total number of HTTP requests',
+    labelNames: ['method', 'route', 'status_code'],
+});
+register.registerMetric(httpRequestCounter);
+
+router.get('/', async (req, res) => {
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
+});
+
+export default router;

@@ -46,9 +46,9 @@ app.use('/v1/billing', billingRoutes);
 app.use('/v1/game', gameRoutes);
 
 // Assets (Redirect to Cloudflare R2 for performance)
-app.get('/tiles/*', (req, res) => {
-    const path = req.params[0];
-    res.redirect(301, `https://assets.pathgen.dev/tiles/${path}`);
+app.use('/tiles', (req, res) => {
+    const path = req.path;
+    res.redirect(301, `https://assets.pathgen.dev/tiles${path}`);
 });
 
 // Error handler

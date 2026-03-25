@@ -71,7 +71,7 @@
     @apply bg-glass border border-glass-border backdrop-blur-md;
   }
   .glass-card {
-    @apply glass rounded-2xl shadow-xl transition-all duration-300;
+    @apply bg-glass border border-glass-border backdrop-blur-md rounded-2xl shadow-xl transition-all duration-300;
   }
   .glow-text {
     text-shadow: 0 0 20px oklch(var(--primary) / 40%);

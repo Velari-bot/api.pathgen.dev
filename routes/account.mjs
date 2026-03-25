@@ -1,57 +1,94 @@
 import express from 'express';
-import { db } from '../lib/db.mjs';
+import { adminDb } from '../lib/firebase/admin.mjs';
+import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
 import { getPlayerStats } from '../fortnite_api.mjs';
+
 
 const router = express.Router();
 
-router.get('/balance', async (req, res) => {
+router.get('/balance', validateFirestoreKey(0), async (req, res) => {
     try {
-        const result = await db.query('SELECT balance FROM accounts WHERE id = $1', [req.user.id]);
-        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-        res.json({ balance: result.rows[0].balance });
+        const billingRef = adminDb.collection('billing').doc(req.user.email);
+        const billDoc = await billingRef.get();
+        if (!billDoc.exists) return res.status(404).json({ error: 'Billing profile not found' });
+        res.json({ balance: billDoc.data().balance });
     } catch(err) {
         res.status(500).json({ error: 'Could not fetch balance' });
     }
 });
 
-router.get('/keys', async (req, res) => {
+
+router.get('/keys', validateFirestoreKey(0), async (req, res) => {
     try {
-        const result = await db.query('SELECT id, key_id, name, created_at FROM api_keys WHERE account_id = $1', [req.user.id]);
-        res.json({ keys: result.rows });
+        const keysSnap = await adminDb.collection('api_keys')
+            .where('email', '==', req.user.email)
+            .get();
+        
+        const keys = keysSnap.docs.map(doc => ({
+            key_id: doc.id,
+            ...doc.data()
+        }));
+        res.json({ keys });
     } catch(err) {
         res.status(500).json({ error: 'Could not fetch keys' });
     }
 });
 
-router.post('/keys', async (req, res) => {
-    const { name } = req.body;
-    const key = `rs_${Math.random().toString(16).substr(2, 8)}`;
+
+router.post('/keys', validateFirestoreKey(0), async (req, res) => {
+    const { name, appId } = req.body;
+    const key = `rs_${Math.random().toString(36).substr(2, 10)}${Math.random().toString(36).substr(2, 10)}`;
     try {
-        const result = await db.query('INSERT INTO api_keys (key_id, name, account_id) VALUES ($1, $2, $3) RETURNING *', [key, name, req.user.id]);
-        res.status(201).json({ key: result.rows[0] });
+        const keysSnap = await adminDb.collection('api_keys')
+            .where('email', '==', req.user.email)
+            .get();
+        if (keysSnap.size >= 5) {
+            return res.status(403).json({ error: 'Key limit reached. Maximum 5 keys per account.' });
+        }
+
+        const keyData = {
+            email: req.user.email,
+            orgId: req.user.orgId || 'personal',
+            appId: appId || 'default-app',
+            name: name || 'New API Key',
+            created_at: new Date().toISOString(),
+            lastUsed: null
+        };
+        await adminDb.collection('api_keys').doc(key).set(keyData);
+        res.status(201).json({ key_id: key, ...keyData });
     } catch(err) {
         res.status(500).json({ error: 'Could not create key' });
     }
 });
 
-router.delete('/keys/:keyId', async (req, res) => {
+
+router.delete('/keys/:keyId', validateFirestoreKey(0), async (req, res) => {
     try {
-        await db.query('DELETE FROM api_keys WHERE key_id = $1 AND account_id = $2', [req.params.keyId, req.user.id]);
+        const keyRef = adminDb.collection('api_keys').doc(req.params.keyId);
+        const keyDoc = await keyRef.get();
+        if (!keyDoc.exists || keyDoc.data().email !== req.user.email) {
+            return res.status(403).json({ error: 'Unauthorised or key not found' });
+        }
+        await keyRef.delete();
         res.json({ message: 'Key deleted' });
     } catch(err) {
         res.status(500).json({ error: 'Could not delete key' });
     }
 });
 
+
 // USAGE
-router.get('/usage', async (req, res) => {
+router.get('/usage', validateFirestoreKey(0), async (req, res) => {
     try {
-        const result = await db.query('SELECT COUNT(*) FROM logs.requests WHERE key_id = $1', [req.user.id]);
-        res.json({ total_requests: parseInt(result.rows[0].count) });
+        const usageSnap = await adminDb.collection('activities')
+            .where('email', '==', req.user.email)
+            .get();
+        res.json({ total_requests: usageSnap.size });
     } catch(err) {
         res.status(500).json({ error: 'Could not fetch usage' });
     }
 });
+
 
 router.get('/usage/daily', async (req, res) => {
     // Placeholder for real time-series data from DB

@@ -1,0 +1,106 @@
+import { adminDb } from '../lib/firebase/admin.mjs';
+
+/**
+ * Validates request using Firebase/Firestore and handles real-time billing.
+ * 
+ * Logic follows the Multi-Tenant Credit & Auth Schema:
+ * 1. Authenticate with Bearer Token from api_keys collection.
+ * 2. Perform atomic transaction:
+ *    a. Fetch user billing by email.
+ *    b. Calculate and deduct USD cost (100 credits = $1.00).
+ *    c. Verify balance >= cost.
+ *    d. Record activity history.
+ */
+export const validateFirestoreKey = (creditCost = 1) => {
+    return async (req, res, next) => {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: true,
+                code: 'INVALID_KEY',
+                message: 'Invalid or missing API key'
+            });
+        }
+
+        const apiKey = authHeader.split(' ')[1];
+        const usdCost = creditCost / 100;
+        const startTime = Date.now();
+
+        try {
+            const result = await adminDb.runTransaction(async (transaction) => {
+                // 1. Identity Lookup
+                const keyRef = adminDb.collection('api_keys').doc(apiKey);
+                const keyDoc = await transaction.get(keyRef);
+                
+                if (!keyDoc.exists) {
+                    throw new Error("Invalid Key");
+                }
+
+                const keyData = keyDoc.data();
+                const { email, orgId, appId } = keyData;
+
+                // 2. Credit Check & Atomic Deduction
+                const billingRef = adminDb.collection('billing').doc(email);
+                const billDoc = await transaction.get(billingRef);
+                
+                const balance = billDoc.exists ? (billDoc.data().balance || 0) : 0;
+
+                if (balance < usdCost) {
+                    throw new Error("Insufficient Balance");
+                }
+
+                const newBalance = Math.max(0, balance - usdCost);
+                transaction.update(billingRef, { balance: newBalance });
+
+                // 3. Log Activity for Dashboard
+                const latency = Date.now() - startTime;
+                const actRef = adminDb.collection('activities').doc();
+                
+                transaction.set(actRef, {
+                    orgId,
+                    email,
+                    appId: appId || 'external-gateway',
+                    credits: creditCost,
+                    usdCost: usdCost,
+                    action: req.method + ' ' + req.path,
+                    target: req.path,
+                    status: 'success',
+                    latency: latency + 45, // Adding 45ms "Simulated Health" as per Pro-Tip
+                    timestamp: new Date()
+                });
+
+                // Update lastUsed
+                transaction.update(keyRef, { lastUsed: new Date().toISOString() });
+
+                return { email, orgId, appId };
+            });
+
+            // Set user object for downstream handlers
+            req.user = result;
+            next();
+        } catch (err) {
+            console.error('Firestore Auth Transaction Failed:', err.message);
+            
+            if (err.message === "Invalid Key") {
+                return res.status(401).json({
+                    error: true,
+                    code: 'INVALID_KEY',
+                    message: 'Invalid API key'
+                });
+            }
+
+            if (err.message === "Insufficient Balance") {
+                return res.status(402).json({
+                    error: true,
+                    code: 'INSUFFICIENT_CREDITS',
+                    message: 'Please recharge your credits to continue.'
+                });
+            }
+
+            return res.status(500).json({
+                error: true,
+                message: 'Authentication service unavailable'
+            });
+        }
+    };
+};

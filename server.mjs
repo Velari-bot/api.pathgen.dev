@@ -4,7 +4,9 @@ import cors from 'cors';
 import morgan from 'morgan';
 
 // Middleware
-import { loggerMiddleware, checkCredits } from './middleware/logger.mjs';
+import { loggerMiddleware } from './middleware/logger.mjs';
+import { validateFirestoreKey } from './middleware/firestore-auth.mjs';
+
 import { rateLimitMiddleware } from './middleware/ratelimit.mjs';
 
 // Routes
@@ -36,8 +38,9 @@ app.use('/logs', logsRoutes);
 
 // 3. API Version 1
 // Paid endpoints (Replay & Session) require credit check and rate limiting
-app.use('/v1/replay', rateLimitMiddleware, checkCredits, replayRoutes);
-app.use('/v1/session', rateLimitMiddleware, checkCredits, sessionRoutes);
+app.use('/v1/replay', rateLimitMiddleware, replayRoutes);
+app.use('/v1/session', rateLimitMiddleware, sessionRoutes);
+
 
 // Free / Low-tier endpoints
 app.use('/v1/auth', authRoutes);

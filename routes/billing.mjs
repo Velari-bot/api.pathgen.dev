@@ -1,17 +1,26 @@
 import express from 'express';
 import { stripeLib, PACKS } from '../lib/stripe.mjs';
-import { db } from '../lib/db.mjs';
+
+import { adminDb } from '../lib/firebase/admin.mjs';
+import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
+
 
 const router = express.Router();
 
-router.get('/history', async (req, res) => {
+router.get('/history', validateFirestoreKey(0), async (req, res) => {
     try {
-        const result = await db.query('SELECT * FROM billing.history WHERE user_id = $1 ORDER BY timestamp DESC', [req.user.id]);
-        res.json({ transactions: result.rows });
+        const historySnap = await adminDb.collection('activities')
+            .where('email', '==', req.user.email)
+            .where('action', '==', 'PURCHASE')
+            .get();
+        
+        const transactions = historySnap.docs.map(doc => doc.data());
+        res.json({ transactions });
     } catch(err) {
         res.status(500).json({ error: 'Could not fetch history' });
     }
 });
+
 
 router.post('/checkout', async (req, res) => {
     const { pack } = req.body;
@@ -38,22 +47,32 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
-        const userId = session.client_reference_id;
-        const amount = session.amount_total;
+        const email = session.customer_email || session.client_reference_id; // Assume client_ref is email for API
+        const amountUsd = session.amount_total / 100;
         
-        // Credits logic
-        let creditsToGrant = 0;
-        if (amount === 499) creditsToGrant = 5000;
-        else if (amount === 1999) creditsToGrant = 25000;
-        else if (amount === 4999) creditsToGrant = 75000;
-
         try {
-            await db.query('UPDATE accounts SET balance = balance + $1 WHERE id = $2', [creditsToGrant, userId]);
-            await db.query('INSERT INTO billing.history (user_id, amount, credits, type) VALUES ($1, $2, $3, $4)', [userId, amount / 100, creditsToGrant, 'purchase']);
-            console.log(`Granted ${creditsToGrant} credits to user ${userId}`);
+            await adminDb.runTransaction(async (transaction) => {
+                const billingRef = adminDb.collection('billing').doc(email);
+                const billDoc = await transaction.get(billingRef);
+                const currentBalance = billDoc.exists ? (billDoc.data().balance || 0) : 0;
+                
+                transaction.set(billingRef, { balance: currentBalance + amountUsd }, { merge: true });
+                
+                const actRef = adminDb.collection('activities').doc();
+                transaction.set(actRef, {
+                    email,
+                    action: 'PURCHASE',
+                    amount: amountUsd,
+                    credits: amountUsd * 100,
+                    status: 'success',
+                    timestamp: new Date()
+                });
+            });
+            console.log(`Granted $${amountUsd} to user ${email}`);
         } catch(err) {
             console.error('Error updating credits after successful purchase:', err);
         }
+
     }
 
     res.json({ received: true });

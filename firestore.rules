@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Allow users to read/write their own data in the 'users' collection
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // API Keys: Users can only see/delete keys associated with their email
+    match /api_keys/{keyId} {
+      allow read, delete: if request.auth != null && request.auth.token.email == resource.data.email;
+      allow create: if request.auth != null && request.resource.data.email == request.auth.token.email;
+    }
+
+    // Transactions / Activities: Read-only for users own logs
+    match /activities/{activityId} {
+      allow read: if request.auth != null && request.auth.token.email == resource.data.email;
+      allow write: if false; // Only admin SDK (backend) should write here
+    }
+
+    // Billing profiles
+    match /billing/{email} {
+      allow read: if request.auth != null && request.auth.token.email == email;
+      allow write: if false; // Managed by backend via Stripe
+    }
+  }
+}

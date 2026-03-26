@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PathGen Developer Engine 🗺️🚀✨🏗️🏜️
 
-## Getting Started
+Official high-performance backend powering the next generation of Fortnite analytics and interactive map experiences.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 🏗️ 1. Hypermap Tiling Engine
+The PathGen Tiling Engine generates **building-level** details (Hypermap) from the live Fortnite map using **Lanczos3 high-fidelity resampling**.
+
+### **Access Pattern**
+```
+GET https://api.pathgen.dev/v1/game/tiles/{z}/{x}/{y}.png?key=YOUR_API_KEY
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### **Billing Model: One-Time Map Pass**
+We use a developer-friendly "Daily Pass" system to make map building affordable.
+*   **Unlock**: **30 Credits ($0.30)** for the very first tile requested of the day.
+*   **Unlimited**: For the next **24 hours**, every other tile request for that map version is **Free (0 Credits)**.
+*   **Efficiency**: A developer can browse the entire 1,365-tile 8K map for less than the cost of a soda.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🎨 2. Map Configuration (Zero-Config)
+Use the `/v1/game/map` endpoint to automatically initialize your map environment.
 
-## Learn More
+```
+GET https://api.pathgen.dev/v1/game/map?key=YOUR_API_KEY
+```
 
-To learn more about Next.js, take a look at the following resources:
+**Response Snapshot:**
+```json
+{
+  "status": 200,
+  "season": "Chapter 7 Season 2",
+  "tile_url": "https://api.pathgen.dev/v1/game/tiles/{z}/{x}/{y}.png?key=YOUR_API_KEY",
+  "max_zoom": 5,
+  "world_bounds": { "min_x": -131072, "max_x": 131072, "min_y": -131072, "max_y": 131072 },
+  "pois": [ { "name": "New Sanctuary", "x": 70000, "y": 30000 } ]
+}
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🏃 3. Developer Integration (3 Lines of Code)
+Initialize a world-class interactive map in your frontend in under 30 minutes:
 
-## Deploy on Vercel
+```javascript
+// A. Initialize Leaflet Simple CRS
+const map = L.map('map', { crs: L.CRS.Simple, minZoom: 0, maxZoom: 5 });
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+// B. Plug in PathGen Tile Server
+L.tileLayer(config.tile_url, { tileSize: 256, noWrap: true, keepBuffer: 4 }).addTo(map);
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+// C. Center and Zoom
+map.setView(L.CRS.Simple.pointToLatLng(L.point(4096, 4096), 5), 1);
+```
+
+### **Coordinate Conversion Helper**
+```javascript
+function worldToLatLng(worldX, worldY) {
+  const WORLD_MIN = -131072;
+  const WORLD_SIZE = 262144;
+  const MAP_PX = 8192; // 256 * 2^5
+  
+  const px = ((worldX - WORLD_MIN) / WORLD_SIZE) * MAP_PX;
+  const py = ((worldY - WORLD_MIN) / WORLD_SIZE) * MAP_PX;
+  
+  return L.CRS.Simple.pointToLatLng(L.point(px, py), 5);
+}
+```
+
+---
+
+## 🔐 4. Authentication
+All requests must include your API key either as a Bearer Token or a URL parameter:
+1. **Header**: `Authorization: Bearer rs_...`
+2. **URL**: `https://api.pathgen.dev/v1/game/map?key=rs_...`
+
+---
+
+## 📊 5. Other Endpoints
+*   `/v1/replay/parse`: Extract movement data and death locations from replay files.
+*   `/v1/game/news`: Live in-game news feed (mirrored assets).
+*   `/v1/game/playlists`: Active game modes and playlist rotation.
+
+*For full endpoint details and real-time testing, visit our [API Explorer](https://platform.pathgen.dev/explorer).*

@@ -95,14 +95,27 @@ router.get('/tiles/:z/:x/:y', validateFirestoreKey(3), async (req, res) => {
             return res.status(202).json(tileInfo);
         }
 
-        // --- NEW: Transparent Proxy Mode ---
-        // Instead of redirecting (which breaks CORS in some explorers), we fetch and stream the image
+        // --- NEW: Smart Format Detection ---
+        // If the requester explicitly asks for JSON (like the API Explorer), we give them a metadata object.
+        // Otherwise, we serve the raw binary PROXY of the tile.
+        if (req.query.json === 'true') {
+            return res.json({
+                status: 200,
+                data: {
+                    z: z, x: x, y: y,
+                    mimeType: 'image/png',
+                    url: `${req.protocol}://${req.get('host')}${req.path}?key=${req.query.key || '...'}`,
+                    description: 'High-fidelity map tile (Lanczos3 resampled)'
+                }
+            });
+        }
+
         const imgRes = await fetch(tileInfo.url);
         if (!imgRes.ok) throw new Error('Failed to fetch tile from R2');
 
         const buffer = Buffer.from(await imgRes.arrayBuffer());
         res.setHeader('Content-Type', 'image/png');
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // Cache for 1 year in browser
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         res.send(buffer);
     } catch (err) {
         console.error('[Tile Request Error]', err.message);

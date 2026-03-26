@@ -115,10 +115,17 @@ router.get('/tiles/:z/:x/:y', validateFirestoreKey(0), async (req, res) => {
             return res.status(202).json(tileInfo);
         }
 
-        // --- NEW: Smart Format Detection (Automated) ---
-        // If the requester explicitly asks for JSON (like the API Explorer), we give them a metadata object.
-        // Otherwise, we serve the raw binary PROXY of the tile.
-        const wantsJson = req.query.json === 'true' || (req.headers.accept && req.headers.accept.includes('application/json'));
+        // --- NEW: Smart Format Detection (Enhanced) ---
+        // 1. Explicitly requested ?json=true
+        // 2. Accept header includes application/json
+        // 3. Request is coming from the Platform API Explorer (CORS/AJAX)
+        const origin = req.headers.origin || '';
+        const referer = req.headers.referer || '';
+        const isExplorer = origin.includes('pathgen.dev') || referer.includes('pathgen.dev/explorer');
+        
+        const wantsJson = req.query.json === 'true' || 
+                         (req.headers.accept && req.headers.accept.includes('application/json')) ||
+                         isExplorer;
         
         if (wantsJson) {
             return res.json({

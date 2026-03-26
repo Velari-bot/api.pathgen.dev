@@ -68,6 +68,15 @@ app.use('/tiles', (req, res) => {
     res.redirect(301, `https://assets.pathgen.dev/tiles${path}`);
 });
 
+// 404 Handler (JSON for everything except documentation/main site)
+app.use((req, res) => {
+    res.status(404).json({
+        error: true,
+        code: 'NOT_FOUND',
+        message: `Endpoint ${req.method} ${req.originalUrl} not found. Check the documentation for valid routes.`
+    });
+});
+
 // Error handler
 app.use((err, req, res, next) => {
     // console.error(err);

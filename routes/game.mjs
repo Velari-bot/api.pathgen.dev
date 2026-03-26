@@ -1,5 +1,5 @@
 import express from 'express';
-import { fortniteLib } from '../fortnite_api.mjs';
+import { fortniteLib, getPlayerStats } from '../fortnite_api.mjs';
 import { getTile } from '../lib/tile_gen.mjs';
 import { validateFirestoreKey, deductCredits } from '../middleware/firestore-auth.mjs';
 import { cache } from '../lib/cache.mjs';
@@ -194,5 +194,53 @@ router.get('/playlists', async (req, res) => {
         res.status(500).json({ status: 500, error: 'Could not fetch playlists' });
     }
 });
+
+// Version 1 Free
+router.get('/lookup', async (req, res) => {
+  const { name } = req.query;
+  if (!name) return res.status(400).json({ error: 'Missing name parameter' });
+
+  try {
+    const stats = await getPlayerStats(name);
+    if (!stats) return res.status(404).json({ error: 'Player not found' });
+    res.json(stats);
+  } catch(err) {
+    res.status(500).json({ error: 'Lookup failed' });
+  }
+});
+
+router.get('/ranked', async (req, res) => {
+  const { name } = req.query;
+  if (!name) return res.status(400).json({ error: 'Missing name parameter' });
+
+  try {
+    const data = await fortniteLib.getStats(name);
+    if (!data || data.error) return res.status(404).json({ error: 'Player not found' });
+    
+    // Extract ranked info if available in the v2 response
+    // For now returning a structured response based on the data schema
+    res.json({
+        account_id: data.account.id,
+        name: data.account.name,
+        rank_info: data.battlePass || { level: 0, progress: 0 }
+    });
+  } catch(err) {
+    res.status(500).json({ error: 'Ranked check failed' });
+  }
+});
+
+router.get('/stats', async (req, res) => {
+  const { name, timeWindow } = req.query;
+  if (!name) return res.status(400).json({ error: 'Missing name parameter' });
+
+  try {
+    const data = await fortniteLib.getStats(name, timeWindow || 'lifetime');
+    if (!data || data.error) return res.status(404).json({ error: 'Player not found' });
+    res.json(data);
+  } catch(err) {
+    res.status(500).json({ error: 'Stats fetch failed' });
+  }
+});
+
 
 export default router;

@@ -5,7 +5,7 @@ const endpoints = [
   { path: "/", name: "Root" },
   { path: "/v1/account/balance", name: "Account Balance", authenticated: true },
   { path: "/v1/account/keys", name: "List API Keys", authenticated: true },
-  { path: "/v1/account/lookup?name=blackgirlslikeme", name: "Player Lookup" },
+  { path: "/v1/game/lookup?name=blackgirlslikeme", name: "Player Lookup" },
   { path: "/v1/game/map", name: "Game Map" },
   { path: "/v1/game/shop", name: "Item Shop" },
   { path: "/v1/game/weapons", name: "Weapons List" },

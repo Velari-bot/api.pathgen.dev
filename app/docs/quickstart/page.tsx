@@ -15,7 +15,8 @@ import {
   BookOpen
 } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const steps = [
   { 
@@ -77,9 +78,9 @@ export default function QuickstartPage() {
                      <p className="text-xs text-muted-foreground leading-relaxed">{s.detail}</p>
                   </CardContent>
                   <div className="p-8 pt-0 mt-4">
-                     <Button size="sm" variant="ghost" className="text-[10px] uppercase font-bold text-primary group-hover:gap-3 transition-all p-0 h-auto" asChild>
-                        <Link href={s.link}>Get Started <ChevronRight className="h-3 w-3" /></Link>
-                     </Button>
+                     <Link href={s.link} className={cn(buttonVariants({ size: "sm", variant: "ghost" }), "text-[10px] uppercase font-bold text-primary group-hover:gap-3 transition-all p-0 h-auto")}>
+                        Get Started <ChevronRight className="h-3 w-3" />
+                     </Link>
                   </div>
                </Card>
             ))}

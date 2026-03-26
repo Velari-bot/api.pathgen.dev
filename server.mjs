@@ -33,6 +33,11 @@ app.use(morgan('dev')); // Console logger
 app.use('/health', healthRoutes);
 app.use('/metrics', metricsRoutes);
 
+app.get('/', (req, res) => {
+    res.type('text/plain');
+    res.send("PathGen API Server. This is for developer integrations only. If you're looking for the platform, visit https://platform.pathgen.dev");
+});
+
 app.get('/robots.txt', (req, res) => {
     res.type('text/plain');
     res.send("User-agent: *\nAllow: /");

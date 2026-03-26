@@ -95,8 +95,15 @@ router.get('/tiles/:z/:x/:y', validateFirestoreKey(3), async (req, res) => {
             return res.status(202).json(tileInfo);
         }
 
-        // Standard logic: Redirect the user to the R2 tile directly for speed
-        res.redirect(302, tileInfo.url);
+        // --- NEW: Transparent Proxy Mode ---
+        // Instead of redirecting (which breaks CORS in some explorers), we fetch and stream the image
+        const imgRes = await fetch(tileInfo.url);
+        if (!imgRes.ok) throw new Error('Failed to fetch tile from R2');
+
+        const buffer = Buffer.from(await imgRes.arrayBuffer());
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // Cache for 1 year in browser
+        res.send(buffer);
     } catch (err) {
         console.error('[Tile Request Error]', err.message);
         res.status(500).json({ error: 'Failed to build tile path' });

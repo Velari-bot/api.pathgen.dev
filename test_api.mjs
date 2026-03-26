@@ -10,7 +10,8 @@ const endpoints = [
   { path: "/v1/game/shop", name: "Item Shop" },
   { path: "/v1/game/weapons", name: "Weapons List" },
   { path: "/v1/game/news", name: "In-game News" },
-  { path: "/v1/game/playlists", name: "Active Playlists" }
+  { path: "/v1/game/playlists", name: "Active Playlists" },
+  { path: "/v1/game/tiles/0/0/0", name: "Map Tile (0/0/0)", authenticated: true }
 ];
 
 async function runTests() {

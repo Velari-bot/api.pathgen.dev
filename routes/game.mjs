@@ -76,7 +76,13 @@ router.get('/map', async (req, res) => {
  * Cost: 3 credits per tile
  */
 router.get('/tiles/:z/:x/:y', validateFirestoreKey(3), async (req, res) => {
-    const { z, x, y } = req.params;
+    const z = parseInt(req.params.z);
+    const x = parseInt(req.params.x);
+    const y = parseInt(req.params.y);
+    
+    if (isNaN(z) || isNaN(x) || isNaN(y)) {
+        return res.status(400).json({ error: 'Invalid tile coordinates. Must be integers.' });
+    }
     
     try {
         // We get the map URL from the first request to associate hash

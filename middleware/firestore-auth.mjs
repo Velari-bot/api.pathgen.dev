@@ -13,16 +13,20 @@ import { adminDb } from '../lib/firebase/admin.mjs';
  */
 export const validateFirestoreKey = (creditCost = 1) => {
     return async (req, res, next) => {
+        let apiKey = req.query.key;
+        
         const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            apiKey = authHeader.split(' ')[1];
+        }
+
+        if (!apiKey) {
             return res.status(401).json({
                 error: true,
                 code: 'INVALID_KEY',
                 message: 'Invalid or missing API key'
             });
         }
-
-        const apiKey = authHeader.split(' ')[1];
         const usdCost = creditCost / 100;
         const startTime = Date.now();
 

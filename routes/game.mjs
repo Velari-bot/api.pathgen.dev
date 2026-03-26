@@ -1,7 +1,8 @@
 import express from 'express';
 import { fortniteLib } from '../fortnite_api.mjs';
 import { getTile } from '../lib/tile_gen.mjs';
-import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
+import { validateFirestoreKey, deductCredits } from '../middleware/firestore-auth.mjs';
+import { cache } from '../lib/cache.mjs';
 
 const router = express.Router();
 
@@ -73,9 +74,9 @@ router.get('/map', async (req, res) => {
 
 /**
  * High-performance Tile Redirect
- * Cost: 3 credits per tile
+ * Model: One-Time Map Pass (30 Credits for 24h Unlimited)
  */
-router.get('/tiles/:z/:x/:y', validateFirestoreKey(3), async (req, res) => {
+router.get('/tiles/:z/:x/:y', validateFirestoreKey(0), async (req, res) => {
     const z = parseInt(req.params.z);
     const x = parseInt(req.params.x);
     const y = parseInt(req.params.y);
@@ -85,20 +86,41 @@ router.get('/tiles/:z/:x/:y', validateFirestoreKey(3), async (req, res) => {
     }
     
     try {
-        // We get the map URL from the first request to associate hash
         const mapData = await fortniteLib.getMap();
         const mapUrl = mapData.images?.blank || 'https://fortnite-api.com/images/map.png';
+        const mapHash = mapData.hash || 'v1'; // fallback
         
-        const tileInfo = await getTile(parseInt(z), parseInt(x), parseInt(y), mapUrl);
+        // 1. Check if user already has a 24h pass for this map
+        const passKey = `map_pass:${req.user.email}:${mapHash}`;
+        const hasPass = await cache.get(passKey);
+        
+        if (!hasPass) {
+            console.log(`[Billing] Triggering 30-credit Map Pass for ${req.user.email}`);
+            
+            try {
+                // Charge for the full 24h map pass
+                await deductCredits(req.user.email, 30, 'MAP_UNLOCKED', `/v1/game/tiles (New Day Pass)`);
+                await cache.set(passKey, 'active', 86400); // 24 hours
+            } catch (billingErr) {
+                if (billingErr.message === 'Insufficient Balance') {
+                    return res.status(402).json({ error: true, code: 'INSUFFICIENT_CREDITS', message: 'Please recharge to unlock the 24h Map Pass (30 Credits).' });
+                }
+                throw billingErr;
+            }
+        }
+
+        const tileInfo = await getTile(z, x, y, mapUrl);
         
         if (tileInfo.error) {
             return res.status(202).json(tileInfo);
         }
 
-        // --- NEW: Smart Format Detection ---
+        // --- NEW: Smart Format Detection (Automated) ---
         // If the requester explicitly asks for JSON (like the API Explorer), we give them a metadata object.
         // Otherwise, we serve the raw binary PROXY of the tile.
-        if (req.query.json === 'true') {
+        const wantsJson = req.query.json === 'true' || (req.headers.accept && req.headers.accept.includes('application/json'));
+        
+        if (wantsJson) {
             return res.json({
                 status: 200,
                 data: {

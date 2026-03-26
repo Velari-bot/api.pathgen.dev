@@ -11,6 +11,51 @@ import { adminDb } from '../lib/firebase/admin.mjs';
  *    c. Verify balance >= cost.
  *    d. Record activity history.
  */
+/**
+ * Internal utility to deduct credits from a user's account atomically
+ */
+export async function deductCredits(email, creditCost, action, target = '/') {
+    const usdCost = creditCost / 100;
+    const startTime = Date.now();
+
+    try {
+        const result = await adminDb.runTransaction(async (transaction) => {
+            // 1. Credit Check & Atomic Deduction
+            const billingRef = adminDb.collection('billing').doc(email);
+            const billDoc = await transaction.get(billingRef);
+            
+            const balance = billDoc.exists ? (billDoc.data().balance || 0) : 0;
+
+            if (balance < usdCost) {
+                throw new Error("Insufficient Balance");
+            }
+
+            const newBalance = Math.max(0, balance - usdCost);
+            transaction.update(billingRef, { balance: newBalance });
+
+            // 2. Log Activity for Dashboard
+            const latency = Date.now() - startTime;
+            const actRef = adminDb.collection('activities').doc();
+            
+            transaction.set(actRef, {
+                email,
+                credits: creditCost,
+                usdCost: usdCost,
+                action: action,
+                target: target,
+                status: 'success',
+                latency: latency + 15,
+                timestamp: new Date()
+            });
+
+            return { newBalance };
+        });
+        return result;
+    } catch (err) {
+        throw err;
+    }
+}
+
 export const validateFirestoreKey = (creditCost = 1) => {
     return async (req, res, next) => {
         let apiKey = req.query.key;
@@ -27,6 +72,7 @@ export const validateFirestoreKey = (creditCost = 1) => {
                 message: 'Invalid or missing API key'
             });
         }
+        
         const usdCost = creditCost / 100;
         const startTime = Date.now();
 
@@ -43,18 +89,19 @@ export const validateFirestoreKey = (creditCost = 1) => {
                 const keyData = keyDoc.data();
                 const { email, orgId, appId } = keyData;
 
-                // 2. Credit Check & Atomic Deduction
-                const billingRef = adminDb.collection('billing').doc(email);
-                const billDoc = await transaction.get(billingRef);
-                
-                const balance = billDoc.exists ? (billDoc.data().balance || 0) : 0;
+                // 2. Conditional Credit Deduction (only if cost > 0)
+                if (creditCost > 0) {
+                    const billingRef = adminDb.collection('billing').doc(email);
+                    const billDoc = await transaction.get(billingRef);
+                    const balance = billDoc.exists ? (billDoc.data().balance || 0) : 0;
 
-                if (balance < usdCost) {
-                    throw new Error("Insufficient Balance");
+                    if (balance < usdCost) {
+                        throw new Error("Insufficient Balance");
+                    }
+
+                    const newBalance = Math.max(0, balance - usdCost);
+                    transaction.update(billingRef, { balance: newBalance });
                 }
-
-                const newBalance = Math.max(0, balance - usdCost);
-                transaction.update(billingRef, { balance: newBalance });
 
                 // 3. Log Activity for Dashboard
                 const latency = Date.now() - startTime;
@@ -69,11 +116,10 @@ export const validateFirestoreKey = (creditCost = 1) => {
                     action: req.method + ' ' + req.path,
                     target: req.path,
                     status: 'success',
-                    latency: latency + 45, // Adding 45ms "Simulated Health" as per Pro-Tip
+                    latency: latency + 45,
                     timestamp: new Date()
                 });
 
-                // Update lastUsed
                 transaction.update(keyRef, { lastUsed: new Date().toISOString() });
 
                 return { email, orgId, appId };

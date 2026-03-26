@@ -48,27 +48,34 @@ router.get('/weapons', async (req, res) => {
 
 router.get('/map', async (req, res) => {
     try {
-        const data = await fortniteLib.getMap();
+        const mapData = await fortniteLib.getMap();
         
-        // Add Coordinate conversion helper constants for Leaflet
-        const MAP_HELPERS = {
-            WORLD_MIN: -131072,
-            WORLD_SIZE: 262144,
-            MAX_ZOOM: 5,
-            MAP_PX: 256 * Math.pow(2, 5), // 8192px
-            LEAFLET_CRS: 'CRS.Simple',
-            CONVERSION_JS: `
-                function worldToLatLng(worldX, worldY) {
-                    const pctX = (worldX - WORLD_MIN) / WORLD_SIZE;
-                    const pctY = (worldY - WORLD_MIN) / WORLD_SIZE;
-                    return L.CRS.Simple.pointToLatLng(L.point(pctX * 8192, pctY * 8192), 5);
-                }
-            `
+        // Match the request for a professional 'Zero-Configuration' map response
+        const MAP_CONFIG = {
+            season: 'Chapter 7 Season 2',
+            tile_url: `${req.protocol}://${req.get('host')}/v1/game/tiles/{z}/{x}/{y}.png?key=${req.query.key || 'your_api_key'}`,
+            max_zoom: 5,
+            min_zoom: 0,
+            tile_size: 256,
+            world_bounds: {
+                min_x: -131072,
+                max_x:  131072,
+                min_y: -131072,
+                max_y:  131072
+            },
+            map_center: { x: 0, y: 0 },
+            coordinate_system: 'fortnite_world_cm',
+            pois: (mapData.pois || []).map(p => ({
+                id: p.id,
+                name: p.name,
+                x: p.location?.x || 0,
+                y: p.location?.y || 0
+            }))
         };
 
-        res.json({ status: 200, data, helpers: MAP_HELPERS });
+        res.json({ status: 200, ...MAP_CONFIG });
     } catch(err) {
-        res.status(500).json({ status: 500, error: 'Could not fetch map' });
+        res.status(500).json({ status: 500, error: 'Could not fetch map config' });
     }
 });
 
@@ -77,9 +84,10 @@ router.get('/map', async (req, res) => {
  * Model: One-Time Map Pass (30 Credits for 24h Unlimited)
  */
 router.get('/tiles/:z/:x/:y', validateFirestoreKey(0), async (req, res) => {
+    // Correctly handle the .png suffix if provided by Leaflet
     const z = parseInt(req.params.z);
     const x = parseInt(req.params.x);
-    const y = parseInt(req.params.y);
+    const y = parseInt(req.params.y.replace('.png', ''));
     
     if (isNaN(z) || isNaN(x) || isNaN(y)) {
         return res.status(400).json({ error: 'Invalid tile coordinates. Must be integers.' });
@@ -88,17 +96,14 @@ router.get('/tiles/:z/:x/:y', validateFirestoreKey(0), async (req, res) => {
     try {
         const mapData = await fortniteLib.getMap();
         const mapUrl = mapData.images?.blank || 'https://fortnite-api.com/images/map.png';
-        const mapHash = mapData.hash || 'v1'; // fallback
+        const mapHash = mapData.hash || 'v1';
         
-        // 1. Check if user already has a 24h pass for this map
         const passKey = `map_pass:${req.user.email}:${mapHash}`;
         const hasPass = await cache.get(passKey);
         
         if (!hasPass) {
             console.log(`[Billing] Triggering 30-credit Map Pass for ${req.user.email}`);
-            
             try {
-                // Charge for the full 24h map pass
                 await deductCredits(req.user.email, 30, 'MAP_UNLOCKED', `/v1/game/tiles (New Day Pass)`);
                 await cache.set(passKey, 'active', 86400); // 24 hours
             } catch (billingErr) {
@@ -143,8 +148,12 @@ router.get('/tiles/:z/:x/:y', validateFirestoreKey(0), async (req, res) => {
         if (!imgRes.ok) throw new Error('Failed to fetch tile from R2');
 
         const buffer = Buffer.from(await imgRes.arrayBuffer());
-        res.setHeader('Content-Type', 'image/png');
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        res.set({
+            'Content-Type': 'image/png',
+            'Cache-Control': 'public, max-age=2592000, immutable',
+            'Access-Control-Allow-Origin': '*',
+            'CDN-Cache-Control': 'max-age=2592000'
+        });
         res.send(buffer);
     } catch (err) {
         console.error('[Tile Request Error]', err.message);

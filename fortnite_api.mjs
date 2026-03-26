@@ -1,73 +1,96 @@
 import https from 'https';
 import dotenv from 'dotenv';
+import { cache } from './lib/cache.mjs';
 dotenv.config();
 
 const API_KEY = process.env.FORTNITE_API_KEY;
 
-function get(path) {
-    return new Promise((resolve, reject) => {
+/**
+ * Generic fetch for fortnite-api.com with local caching
+ */
+async function fetchWithCache(path, ex = 3600) {
+    const cacheKey = `fnapi:${path}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+
+    const result = await new Promise((resolve, reject) => {
+        const url = `https://fortnite-api.com${path}`;
         const opts = {
-            hostname: 'fortnite-api.com',
-            path,
             method: 'GET',
             headers: {
                 'Authorization': API_KEY || ''
             }
         };
-        const req = https.request(opts, res => {
+        
+        const req = https.get(url, opts, res => {
             let data = '';
             res.on('data', c => data += c);
             res.on('end', () => {
-                try { resolve(JSON.parse(data)); }
+                try { 
+                    const parsed = JSON.parse(data);
+                    if (parsed.status === 200) {
+                        resolve(parsed.data);
+                    } else {
+                        resolve({ error: true, status: parsed.status, message: parsed.error || 'API Error' });
+                    }
+                }
                 catch(e) { reject(e); }
             });
         });
         req.on('error', reject);
-        req.end();
     });
-}
 
-export async function getPlayerStats(displayName) {
-    try {
-        const res = await get(`/v2/stats/br/v2?name=${encodeURIComponent(displayName)}`);
-        if (res.status !== 200) return null;
-        
-        const account = res.data?.account || {};
-        const stats = res.data?.stats?.all || {};
-        const overall = stats.overall || {};
-        const solo = stats.solo || {};
-
-        return {
-            account_id: account.id || null,
-            display_name: account.name || displayName,
-            platform: detectPlatform(res.data),
-            level: res.data?.battlePass?.level || null,
-            wins: overall.wins || 0,
-            kills: overall.kills || 0,
-            kd: overall.kd || 0,
-            matches: overall.matches || 0,
-            win_rate: overall.winRate || 0,
-            top10: overall.top10 || 0,
-            minutes_played: overall.minutesPlayed || 0,
-            solo_wins: solo.wins || 0,
-            solo_kd: solo.kd || 0,
-            crown_wins: null,
-            ranked: null
-        };
-    } catch(e) {
-        console.log(`Fortnite-API failed for ${displayName}:`, e.message);
-        return null;
+    if (result && !result.error) {
+        await cache.set(cacheKey, JSON.stringify(result), ex);
     }
+    return result;
 }
 
-function detectPlatform(data) {
-    const stats = data?.stats || {};
-    const kb = stats.keyboardMouse?.overall?.minutesPlayed || 0;
-    const gp = stats.gamepad?.overall?.minutesPlayed || 0;
-    const tc = stats.touch?.overall?.minutesPlayed || 0;
+export const fortniteLib = {
+    // 1. Account & Stats
+    getStats: (name, timeWindow = 'lifetime') => fetchWithCache(`/v2/stats/br/v2?name=${encodeURIComponent(name)}&timeWindow=${timeWindow}`, 1800),
+    getStatsById: (id, timeWindow = 'lifetime') => fetchWithCache(`/v2/stats/br/v2/${id}?timeWindow=${timeWindow}`, 1800),
+    
+    // 2. Map
+    getMap: () => fetchWithCache('/v1/map', 86400), // Map changes infrequently
+    
+    // 3. News
+    getNews: () => fetchWithCache('/v2/news', 3600),
+    getBRNews: () => fetchWithCache('/v2/news/br', 3600),
+    
+    // 4. Shop
+    getShop: () => fetchWithCache('/v2/shop', 1800),
+    
+    // 5. Playlists
+    getPlaylists: () => fetchWithCache('/v1/playlists', 86400),
+    getPlaylistById: (id) => fetchWithCache(`/v1/playlists/${id}`, 86400),
+    
+    // 6. Cosmetics
+    getCosmetics: () => fetchWithCache('/v2/cosmetics', 86400),
+    getNewCosmetics: () => fetchWithCache('/v2/cosmetics/new', 3600),
+    getBRCosmetics: () => fetchWithCache('/v2/cosmetics/br', 86400),
+    getCosmeticById: (id) => fetchWithCache(`/v2/cosmetics/br/${id}`, 86400),
+    searchCosmetic: (query) => fetchWithCache(`/v2/cosmetics/br/search?${new URLSearchParams(query)}`, 3600)
+};
 
-    if (kb >= gp && kb >= tc) return 'PC';
-    if (gp >= kb && gp >= tc) return 'Console/Gamepad';
-    if (tc >= kb && tc >= gp) return 'Mobile/Touch';
-    return 'PC';
+// Legacy support for getPlayerStats
+export async function getPlayerStats(displayName) {
+    const data = await fortniteLib.getStats(displayName);
+    if (!data || data.error) return null;
+
+    const account = data.account || {};
+    const stats = data.stats?.all || {};
+    const overall = stats.overall || {};
+    
+    return {
+        account_id: account.id,
+        display_name: account.name || displayName,
+        platform: 'PC', // Simplify for legacy
+        level: data.battlePass?.level || 0,
+        wins: overall.wins || 0,
+        kills: overall.kills || 0,
+        kd: overall.kd || 0,
+        matches: overall.matches || 0,
+        win_rate: overall.winRate || 0
+    };
 }

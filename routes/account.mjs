@@ -1,7 +1,7 @@
 import express from 'express';
 import { adminDb } from '../lib/firebase/admin.mjs';
 import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
-import { getPlayerStats } from '../fortnite_api.mjs';
+import { getPlayerStats, fortniteLib } from '../fortnite_api.mjs';
 
 
 const router = express.Router();
@@ -113,12 +113,37 @@ router.get('/lookup', async (req, res) => {
   }
 });
 
-router.get('/ranked', (req, res) => {
-  res.json({ status: 'ok', mode: 'Ranked BR', rank: 'Gold II' });
+router.get('/ranked', async (req, res) => {
+  const { name } = req.query;
+  if (!name) return res.status(400).json({ error: 'Missing name parameter' });
+
+  try {
+    const data = await fortniteLib.getStats(name);
+    if (!data || data.error) return res.status(404).json({ error: 'Player not found' });
+    
+    // Extract ranked info if available in the v2 response
+    // For now returning a structured response based on the data schema
+    res.json({
+        account_id: data.account.id,
+        name: data.account.name,
+        rank_info: data.battlePass || { level: 0, progress: 0 }
+    });
+  } catch(err) {
+    res.status(500).json({ error: 'Ranked check failed' });
+  }
 });
 
-router.get('/stats', (req, res) => {
-  res.json({ status: 'ok', message: 'General player stats' });
+router.get('/stats', async (req, res) => {
+  const { name, timeWindow } = req.query;
+  if (!name) return res.status(400).json({ error: 'Missing name parameter' });
+
+  try {
+    const data = await fortniteLib.getStats(name, timeWindow || 'lifetime');
+    if (!data || data.error) return res.status(404).json({ error: 'Player not found' });
+    res.json(data);
+  } catch(err) {
+    res.status(500).json({ error: 'Stats fetch failed' });
+  }
 });
 
 export default router;

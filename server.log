@@ -1,0 +1,8 @@
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+Firebase Admin Initialized from Service Account
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+PathGen API Server running on port 3000
+GET /map
+[EXTERNAL_REQ] https://fortnite-api.com/v1/map
+[EXTERNAL_SUCCESS] /v1/map
+[0mGET /v1/game/map [32m200[0m 442.024 ms - 6104[0m

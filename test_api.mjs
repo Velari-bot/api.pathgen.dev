@@ -1,5 +1,5 @@
 const API_KEY = "rs_vgyqz2jwi203htfpug";
-const BASE_URL = "https://api.pathgen.dev";
+const BASE_URL = process.argv[2] || "https://api.pathgen.dev";
 
 const endpoints = [
   { path: "/", name: "Root" },
@@ -15,7 +15,8 @@ const endpoints = [
 
 async function runTests() {
   console.log("🚀 Starting API Tests...");
-  console.log(`Using Key: ${API_KEY}\n`);
+  console.log(`Using Key: ${API_KEY}`);
+  console.log(`Targeting: ${BASE_URL}\n`);
 
   for (const ep of endpoints) {
     const url = `${BASE_URL}${ep.path}`;

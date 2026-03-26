@@ -1,4 +1,3 @@
-import https from 'https';
 import dotenv from 'dotenv';
 import { cache } from './lib/cache.mjs';
 dotenv.config();
@@ -11,39 +10,36 @@ const API_KEY = process.env.FORTNITE_API_KEY;
 async function fetchWithCache(path, ex = 3600) {
     const cacheKey = `fnapi:${path}`;
     const cached = await cache.get(cacheKey);
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+        console.log(`[Cache Hit] ${path}`);
+        return JSON.parse(cached);
+    }
 
-    const result = await new Promise((resolve, reject) => {
-        const url = `https://fortnite-api.com${path}`;
-        const opts = {
+    const url = `https://fortnite-api.com${path}`;
+    console.log(`[External Req] ${url}`);
+    
+    try {
+        const res = await fetch(url, {
             method: 'GET',
             headers: {
                 'Authorization': API_KEY || ''
             }
-        };
-        
-        const req = https.get(url, opts, res => {
-            let data = '';
-            res.on('data', c => data += c);
-            res.on('end', () => {
-                try { 
-                    const parsed = JSON.parse(data);
-                    if (parsed.status === 200) {
-                        resolve(parsed.data);
-                    } else {
-                        resolve({ error: true, status: parsed.status, message: parsed.error || 'API Error' });
-                    }
-                }
-                catch(e) { reject(e); }
-            });
         });
-        req.on('error', reject);
-    });
 
-    if (result && !result.error) {
-        await cache.set(cacheKey, JSON.stringify(result), ex);
+        const parsed = await res.json();
+        
+        if (parsed.status === 200) {
+            const result = parsed.data;
+            await cache.set(cacheKey, JSON.stringify(result), ex);
+            return result;
+        } else {
+            console.error(`[FN-API Error] Status: ${parsed.status}, Msg: ${parsed.error}`);
+            return { error: true, status: parsed.status, message: parsed.error || 'API Error' };
+        }
+    } catch (err) {
+        console.error(`[Network/Fetch Error] ${err.message}`);
+        return { error: true, message: err.message };
     }
-    return result;
 }
 
 export const fortniteLib = {
@@ -52,7 +48,7 @@ export const fortniteLib = {
     getStatsById: (id, timeWindow = 'lifetime') => fetchWithCache(`/v2/stats/br/v2/${id}?timeWindow=${timeWindow}`, 1800),
     
     // 2. Map
-    getMap: () => fetchWithCache('/v1/map', 86400), // Map changes infrequently
+    getMap: () => fetchWithCache('/v1/map', 86400),
     
     // 3. News
     getNews: () => fetchWithCache('/v2/news', 3600),
@@ -85,7 +81,7 @@ export async function getPlayerStats(displayName) {
     return {
         account_id: account.id,
         display_name: account.name || displayName,
-        platform: 'PC', // Simplify for legacy
+        platform: 'PC',
         level: data.battlePass?.level || 0,
         wins: overall.wins || 0,
         kills: overall.kills || 0,

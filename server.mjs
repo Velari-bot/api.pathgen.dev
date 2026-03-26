@@ -38,6 +38,10 @@ app.get('/', (req, res) => {
     res.send("PathGen API Server. This is for developer integrations only. If you're looking for the platform, visit https://platform.pathgen.dev");
 });
 
+app.get('/debug', (req, res) => {
+    res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
 app.get('/robots.txt', (req, res) => {
     res.type('text/plain');
     res.send("User-agent: *\nAllow: /");

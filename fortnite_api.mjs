@@ -9,11 +9,17 @@ const API_KEY = process.env.FORTNITE_API_KEY;
  * Generic fetch for fortnite-api.com with local caching and image mirroring
  */
 async function fetchWithCache(path, ex = 3600) {
-    const cacheKey = `fnapi:${path}`;
+    const cacheKey = `fnmirror:${path}`;
+    
+    // Check if we already have it in cache
     const cached = await cache.get(cacheKey);
     if (cached) {
         console.log(`[Cache Hit] ${path}`);
-        return JSON.parse(cached);
+        let result = JSON.parse(cached);
+        
+        // Double-check if we need to mirror more images that might have been added to the response schema 
+        // or were missed. Actually, let's just return it if it's there.
+        return result;
     }
 
     const url = `https://fortnite-api.com${path}`;
@@ -33,8 +39,10 @@ async function fetchWithCache(path, ex = 3600) {
             let result = parsed.data;
             
             // Mirror all images detected in the JSON to PathGen's R2 storage
+            console.log(`[Mirror] Syncing images for ${path}...`);
             result = await mirrorObjectUrls(result);
             
+            // Now cache the JSON with our NEW mirrored URLs
             await cache.set(cacheKey, JSON.stringify(result), ex);
             return result;
         } else {

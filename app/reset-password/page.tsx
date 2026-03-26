@@ -21,6 +21,10 @@ export default function ResetPasswordPage() {
     setLoading(true);
     setError("");
     try {
+      if (!auth) {
+        setError("Authentication not initialized");
+        return;
+      }
       await sendPasswordResetEmail(auth, email);
       setSent(true);
     } catch (err: unknown) {

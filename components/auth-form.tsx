@@ -28,6 +28,10 @@ export function AuthForm({ type }: AuthFormProps) {
     setLoading(true);
     setError("");
     try {
+      if (!auth || !db) {
+        setError("Firebase services are not available");
+        return;
+      }
       if (type === "login") {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
@@ -59,6 +63,10 @@ export function AuthForm({ type }: AuthFormProps) {
   const handleGoogle = async () => {
     setLoading(true);
     try {
+      if (!auth) {
+        setError("Authentication service not available");
+        return;
+      }
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       router.push("/dashboard");

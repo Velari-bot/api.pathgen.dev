@@ -1,11 +1,12 @@
 import dotenv from 'dotenv';
 import { cache } from './lib/cache.mjs';
+import { mirrorObjectUrls } from './lib/image_mirror.mjs';
 dotenv.config();
 
 const API_KEY = process.env.FORTNITE_API_KEY;
 
 /**
- * Generic fetch for fortnite-api.com with local caching
+ * Generic fetch for fortnite-api.com with local caching and image mirroring
  */
 async function fetchWithCache(path, ex = 3600) {
     const cacheKey = `fnapi:${path}`;
@@ -29,7 +30,11 @@ async function fetchWithCache(path, ex = 3600) {
         const parsed = await res.json();
         
         if (parsed.status === 200) {
-            const result = parsed.data;
+            let result = parsed.data;
+            
+            // Mirror all images detected in the JSON to PathGen's R2 storage
+            result = await mirrorObjectUrls(result);
+            
             await cache.set(cacheKey, JSON.stringify(result), ex);
             return result;
         } else {

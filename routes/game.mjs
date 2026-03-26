@@ -46,25 +46,40 @@ router.get('/weapons', async (req, res) => {
     res.json({ status: 200, data: { pool: ['Assault Rifle', 'Shotgun', 'Sniper', 'Pistol', 'SMG'] } });
 });
 
-router.get('/map', async (req, res) => {
+router.get('/map', validateFirestoreKey(0), async (req, res) => {
     try {
         const mapData = await fortniteLib.getMap();
+        const mapHash = mapData.hash || 'v1';
         
-        // Match the request for a professional 'Zero-Configuration' map response
+        // --- TURBO EDGE: Pre-unlock the Map Pass on first config fetch ---
+        const passKey = `map_pass:${req.user.email}:${mapHash}`;
+        const hasPass = await cache.get(passKey);
+        
+        if (!hasPass) {
+            console.log(`[Billing] Proactive 30-credit Map Pass for ${req.user.email}`);
+            try {
+                await deductCredits(req.user.email, 30, 'MAP_UNLOCKED_TURBO', `/v1/game/map (Proactive)`);
+                await cache.set(passKey, 'active', 86400); // 24 hours
+            } catch (billingErr) {
+                if (billingErr.message === 'Insufficient Balance') {
+                    return res.status(402).json({ error: true, code: 'INSUFFICIENT_CREDITS', message: 'Insufficient Credits ($0.30) to unlock this world.' });
+                }
+                throw billingErr;
+            }
+        }
+
         const MAP_CONFIG = {
             season: 'Chapter 7 Season 2',
-            tile_url: `${req.protocol}://${req.get('host')}/v1/game/tiles/{z}/{x}/{y}.png?key=${req.query.key || 'your_api_key'}`,
+            // --- NEW: Direct CDN Tile URL for Osirion-level performance (Bypass API server) ---
+            tile_url: `${process.env.R2_PUBLIC_URL || 'https://assets.pathgen.dev'}/tiles/${mapHash}/{z}/{x}/{y}.png`,
+            
+            // --- Fallback: Proxied URL for Explorer/Tools ---
+            proxied_tile_url: `${req.protocol}://${req.get('host')}/v1/game/tiles/{z}/{x}/{y}.png?key=${req.query.key || 'your_api_key'}`,
+            
             max_zoom: 5,
             min_zoom: 0,
             tile_size: 256,
-            world_bounds: {
-                min_x: -131072,
-                max_x:  131072,
-                min_y: -131072,
-                max_y:  131072
-            },
-            map_center: { x: 0, y: 0 },
-            coordinate_system: 'fortnite_world_cm',
+            world_bounds: { min_x: -131072, max_x: 131072, min_y: -131072, max_y: 131072 },
             pois: (mapData.pois || []).map(p => ({
                 id: p.id,
                 name: p.name,
@@ -75,6 +90,7 @@ router.get('/map', async (req, res) => {
 
         res.json({ status: 200, ...MAP_CONFIG });
     } catch(err) {
+        console.error('[Map Sync Error]', err.message);
         res.status(500).json({ status: 500, error: 'Could not fetch map config' });
     }
 });

@@ -19,8 +19,13 @@ export function useAuth() {
   });
 
   useEffect(() => {
+    if (!auth) {
+      setState({ user: null, loading: false, userData: null });
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
+      if (user && db) {
         // Fetch user data from Firestore (credits, etc)
         const userRef = doc(db, "users", user.uid);
         

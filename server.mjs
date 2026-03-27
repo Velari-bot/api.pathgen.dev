@@ -61,6 +61,7 @@ app.use('/v1/auth', authRoutes);
 app.use('/v1/account', accountRoutes);
 app.use('/v1/billing', billingRoutes);
 app.use('/v1/game', gameRoutes);
+app.use('/v1', gameRoutes); // Root alias for compatibility (e.g., /v1/map, /v1/lookup)
 
 // Assets (Redirect to Cloudflare R2 for performance)
 app.use('/tiles', (req, res) => {

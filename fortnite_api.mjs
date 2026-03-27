@@ -26,12 +26,18 @@ async function fetchWithCache(path, ex = 3600) {
     console.log(`[External Req] ${url}`);
     
     try {
+        // Use AbortController for a 10s fetch timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
         const res = await fetch(url, {
             method: 'GET',
             headers: {
                 'Authorization': API_KEY || ''
-            }
+            },
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
 
         const parsed = await res.json();
         
@@ -39,10 +45,21 @@ async function fetchWithCache(path, ex = 3600) {
             let result = parsed.data;
             
             // Mirror all images detected in the JSON to PathGen's R2 storage
-            console.log(`[Mirror] Syncing images for ${path}...`);
-            result = await mirrorObjectUrls(result);
+            // Optimization: Filter out massive payloads to avoid Vercel/proxy timeouts
+            const isLargePayload = path.includes('/cosmetics') || path.includes('/shop');
             
-            // Now cache the JSON with our NEW mirrored URLs
+            if (isLargePayload) {
+                console.log(`[Mirror Skip] Payload for ${path} is too large for synchronous mirroring.`);
+            } else {
+                try {
+                    console.log(`[Mirror] Syncing images for ${path}...`);
+                    result = await mirrorObjectUrls(result);
+                } catch (mirrorErr) {
+                    console.error(`[Mirror Warning] Background mirroring failed for ${path}:`, mirrorErr.message);
+                }
+            }
+            
+            // Always cache whatever we have (mirrored or original) to satisfy subsequent requests
             await cache.set(cacheKey, JSON.stringify(result), ex);
             return result;
         } else {

@@ -197,11 +197,31 @@ router.get('/playlists', async (req, res) => {
 
 // Version 1 Free
 router.get('/lookup', async (req, res) => {
-  const { name } = req.query;
-  if (!name) return res.status(400).json({ error: 'Missing name parameter' });
+  const { name, accountId } = req.query;
+  if (!name && !accountId) return res.status(400).json({ error: 'Missing name or accountId parameter' });
 
   try {
-    const stats = await getPlayerStats(name);
+    let stats;
+    if (name) {
+      stats = await getPlayerStats(name);
+    } else {
+      // If only accountId is provided
+      const raw = await fortniteLib.getStatsById(accountId);
+      if (!raw || raw.error) return res.status(404).json({ error: 'Player not found' });
+      // Map raw stats to getPlayerStats format
+      stats = {
+        account_id: raw.account.id,
+        display_name: raw.account.name,
+        platform: 'PC',
+        level: raw.battlePass?.level || 0,
+        wins: raw.stats?.all?.overall?.wins || 0,
+        kills: raw.stats?.all?.overall?.kills || 0,
+        kd: raw.stats?.all?.overall?.kd || 0,
+        matches: raw.stats?.all?.overall?.matches || 0,
+        win_rate: raw.stats?.all?.overall?.winRate || 0
+      };
+    }
+    
     if (!stats) return res.status(404).json({ error: 'Player not found' });
     res.json(stats);
   } catch(err) {
@@ -210,15 +230,13 @@ router.get('/lookup', async (req, res) => {
 });
 
 router.get('/ranked', async (req, res) => {
-  const { name } = req.query;
-  if (!name) return res.status(400).json({ error: 'Missing name parameter' });
+  const { name, accountId } = req.query;
+  if (!name && !accountId) return res.status(400).json({ error: 'Missing name or accountId parameter' });
 
   try {
-    const data = await fortniteLib.getStats(name);
+    const data = name ? await fortniteLib.getStats(name) : await fortniteLib.getStatsById(accountId);
     if (!data || data.error) return res.status(404).json({ error: 'Player not found' });
     
-    // Extract ranked info if available in the v2 response
-    // For now returning a structured response based on the data schema
     res.json({
         account_id: data.account.id,
         name: data.account.name,
@@ -230,11 +248,14 @@ router.get('/ranked', async (req, res) => {
 });
 
 router.get('/stats', async (req, res) => {
-  const { name, timeWindow } = req.query;
-  if (!name) return res.status(400).json({ error: 'Missing name parameter' });
+  const { name, accountId, timeWindow } = req.query;
+  if (!name && !accountId) return res.status(400).json({ error: 'Missing name or accountId parameter' });
 
   try {
-    const data = await fortniteLib.getStats(name, timeWindow || 'lifetime');
+    const data = name ? 
+      await fortniteLib.getStats(name, timeWindow || 'lifetime') : 
+      await fortniteLib.getStatsById(accountId, timeWindow || 'lifetime');
+      
     if (!data || data.error) return res.status(404).json({ error: 'Player not found' });
     res.json(data);
   } catch(err) {
@@ -242,5 +263,10 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+
+
+router.get('/ping', (req, res) => {
+    res.json({ status: 200, message: 'pong', time: new Date().toISOString() });
+});
 
 export default router;

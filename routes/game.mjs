@@ -24,14 +24,31 @@ router.get('/cosmetics/new', async (req, res) => {
     }
 });
 
+router.get('/cosmetics/search', async (req, res) => {
+    const { name, lang } = req.query;
+    if (!name) return res.status(400).json({ error: 'Missing name parameter for search' });
+    
+    try {
+        const data = await fortniteLib.searchCosmetic({ name, language: lang || 'en' });
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Search failed' });
+    }
+});
+
 router.get('/cosmetics/:id', async (req, res) => {
     try {
-        const data = await fortniteLib.getCosmeticById(req.params.id);
+        const id = req.params.id;
+        if (!id || id === '{id}') {
+            return res.status(400).json({ error: 'Please provide a valid cosmetic ID.' });
+        }
+        const data = await fortniteLib.getCosmeticById(id);
         res.json({ status: 200, data });
     } catch(err) {
         res.status(500).json({ status: 500, error: 'Could not fetch cosmetic detail' });
     }
 });
+
 
 router.get('/shop', async (req, res) => {
     try {

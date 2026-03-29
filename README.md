@@ -79,8 +79,11 @@ All requests must include your API key either as a Bearer Token or a URL paramet
 ---
 
 ## 📊 5. Other Endpoints
-*   `/v1/replay/parse`: Extract movement data and death locations from replay files.
-*   `/v1/game/news`: Live in-game news feed (mirrored assets).
+*   `/v1/replay/parse`: Advanced parsing of Fortnite replay files including movement, scoreboard, and weapon data.
+*   `/v1/ai/coach`: AI-powered performance analysis for single matches (30 Credits).
+*   `/v1/ai/session-coach`: Tournament-style session analysis for up to 6 matches (50 Credits).
+*   `/v1/ai/opponent-scout`: Competitive scouting reports on any player via username (25 Credits).
+*   `/v1/game/news`: Live in-game news feed.
 *   `/v1/game/playlists`: Active game modes and playlist rotation.
 
 *For full endpoint details and real-time testing, visit our [API Explorer](https://platform.pathgen.dev/explorer).*

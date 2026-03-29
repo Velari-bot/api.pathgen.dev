@@ -230,7 +230,7 @@ export async function parseReplay(inputBuffer) {
   }
 
   result.match_overview.result = result.match_overview.placement === 1 ? 'Victory Royale' : 'Eliminated';
-  result.ai_coach = generateCoach(result);
+  result.ai_coach = null;
   result.parser_meta.parsed_at = new Date().toISOString();
   result.parser_meta.parse_time_ms = Date.now() - startAt;
   result.parser_meta.allRaw = allRaw;
@@ -241,7 +241,7 @@ function buildEmptyResult() {
   return { match_overview: { session_id: null, result: null, placement: null, mode: null, timestamp: null, lobby: { players: null, ais: null, teams: null }, performance_metrics: { time_alive: null, time_alive_ms: null, drop_score: null, ideal_drop_time: null, actual_drop_time: null } }, combat_summary: { eliminations: { total: null, players: null, ai: null }, damage: { to_players: null, from_players: null, to_ai: null, player_damage_ratio: null, self_damage: null, storm_damage: null, fall_damage: null }, accuracy_general: { overall_percentage: null, total_shots: null, hits_to_players: null, headshots: null, headshot_rate: null, hits_by_target: { players: null, ais: null, npcs: null, shootables: null } }, survival: { health_healed: null, shield_healed: null, health_taken: null, shield_taken: null, time_in_storm_ms: null, distance_foot_cm: null, distance_skydiving_cm: null } }, building_and_utility: { materials_gathered: { wood: null, stone: null, metal: null }, mechanics: { builds_placed: null, builds_edited: null, avg_edit_time_ms: null, edit_accuracy: null, weakpoint_accuracy: null } }, weapon_deep_dive: [], movement: { drop_location: null, death_location: null, player_track: [], bus_route: null }, storm: [], scoreboard: [], elim_feed: [], ai_coach: null, parser_meta: { parsed_at: null, parse_time_ms: null, file_version: null, chunks_decrypted: 0, positions_extracted: 0, names_found: 0, confidence: { stats: 'missing', positions: 'missing', weapons: 'missing' } } };
 }
 function fmtTime(ms) { const s = Math.floor(ms/1000); return Math.floor(s/60) + 'm ' + String(s%60).padStart(2,'0') + 's'; }
-function generateCoach(r) { return { summary: r.match_overview.result === 'Victory Royale' ? 'Dominant victory!' : 'Solid match.', strengths: ['High damage output'], weaknesses: ['Accuracy below average'] }; }
+
 function calcSkydiveDistance(track) {
   if (!track || track.length < 2) return null;
   let skydiving = false, skydiveDist = 0;

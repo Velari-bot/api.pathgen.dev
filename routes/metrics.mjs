@@ -15,8 +15,14 @@ const httpRequestCounter = new client.Counter({
 register.registerMetric(httpRequestCounter);
 
 router.get('/', async (req, res) => {
-    res.set('Content-Type', register.contentType);
-    res.end(await register.metrics());
+    try {
+        res.set('Content-Type', register.contentType);
+        const metrics = await register.metrics();
+        res.end(metrics);
+    } catch (err) {
+        console.error('[Metrics Error]', err.message);
+        res.status(500).json({ error: 'Failed to generate metrics', message: err.message });
+    }
 });
 
 export default router;

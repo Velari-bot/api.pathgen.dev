@@ -16,6 +16,12 @@ register.registerMetric(httpRequestCounter);
 
 router.get('/', async (req, res) => {
     try {
+        // Support JSON if requested via query or Accept header (for API Explorer)
+        if (req.query.format === 'json' || req.headers.accept?.includes('application/json')) {
+            const metrics = await register.getMetricsAsJSON();
+            return res.json({ status: 200, metrics });
+        }
+
         res.set('Content-Type', register.contentType);
         const metrics = await register.metrics();
         res.end(metrics);

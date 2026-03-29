@@ -19,6 +19,7 @@ import billingRoutes from './routes/billing.mjs';
 import replayRoutes from './routes/replay.mjs';
 import sessionRoutes from './routes/session.mjs';
 import gameRoutes from './routes/game.mjs';
+import aiRoutes from './routes/ai.mjs';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -61,6 +62,7 @@ app.use('/v1/auth', authRoutes);
 app.use('/v1/account', accountRoutes);
 app.use('/v1/billing', billingRoutes);
 app.use('/v1/game', gameRoutes);
+app.use('/v1/ai', rateLimitMiddleware, aiRoutes);
 app.use('/v1', gameRoutes); // Root alias for compatibility (e.g., /v1/map, /v1/lookup)
 
 // Assets (Redirect to Cloudflare R2 for performance)

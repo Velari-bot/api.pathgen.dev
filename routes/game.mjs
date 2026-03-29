@@ -66,33 +66,21 @@ router.get('/weapons', async (req, res) => {
 router.get('/map', validateFirestoreKey(0), async (req, res) => {
     try {
         const mapData = await fortniteLib.getMap();
+        res.json({ status: 200, data: mapData });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Could not fetch map images' });
+    }
+});
+
+router.get('/map/config', validateFirestoreKey(0), async (req, res) => {
+    try {
+        const mapData = await fortniteLib.getMap();
         const mapHash = mapData.hash || 'v1';
         
-        // --- TURBO EDGE: Pre-unlock the Map Pass on first config fetch ---
-        const passKey = `map_pass:${req.user.email}:${mapHash}`;
-        const hasPass = await cache.get(passKey);
-        
-        if (!hasPass) {
-            console.log(`[Billing] Proactive 30-credit Map Pass for ${req.user.email}`);
-            try {
-                await deductCredits(req.user.email, 30, 'MAP_UNLOCKED_TURBO', `/v1/game/map (Proactive)`);
-                await cache.set(passKey, 'active', 86400); // 24 hours
-            } catch (billingErr) {
-                if (billingErr.message === 'Insufficient Balance') {
-                    return res.status(402).json({ error: true, code: 'INSUFFICIENT_CREDITS', message: 'Insufficient Credits ($0.30) to unlock this world.' });
-                }
-                throw billingErr;
-            }
-        }
-
         const MAP_CONFIG = {
             season: 'Chapter 7 Season 2',
-            // --- NEW: Direct CDN Tile URL for Osirion-level performance (Bypass API server) ---
             tile_url: `${process.env.R2_PUBLIC_URL || 'https://assets.pathgen.dev'}/tiles/${mapHash}/{z}/{x}/{y}.png`,
-            
-            // --- Fallback: Proxied URL for Explorer/Tools ---
             proxied_tile_url: `${req.protocol}://${req.get('host')}/v1/game/tiles/{z}/{x}/{y}.png?key=${req.query.key || 'your_api_key'}`,
-            
             max_zoom: 5,
             min_zoom: 0,
             tile_size: 256,
@@ -104,13 +92,44 @@ router.get('/map', validateFirestoreKey(0), async (req, res) => {
                 y: p.location?.y || 0
             }))
         };
-
         res.json({ status: 200, ...MAP_CONFIG });
     } catch(err) {
-        console.error('[Map Sync Error]', err.message);
         res.status(500).json({ status: 500, error: 'Could not fetch map config' });
     }
 });
+
+router.get('/map/tiles', validateFirestoreKey(0), async (req, res) => {
+    try {
+        const mapData = await fortniteLib.getMap();
+        const mapHash = mapData.hash || 'v1';
+        const baseUrl = process.env.R2_PUBLIC_URL || 'https://assets.pathgen.dev';
+        
+        const tiles = [];
+        for (let z = 0; z <= 5; z++) {
+            const tilesPerAxis = Math.pow(2, z);
+            for (let x = 0; x < tilesPerAxis; x++) {
+                for (let y = 0; y < tilesPerAxis; y++) {
+                    tiles.push({
+                        z, x, y,
+                        url: `${baseUrl}/tiles/${mapHash}/${z}/${x}/${y}.png`
+                    });
+                }
+            }
+        }
+        
+        res.json({ 
+            status: 200, 
+            data: {
+                map_hash: mapHash,
+                total_tiles: tiles.length,
+                tiles
+            }
+        });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Could not generate tile list' });
+    }
+});
+
 
 /**
  * High-performance Tile Redirect

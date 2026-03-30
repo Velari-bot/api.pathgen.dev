@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
-    "@google-cloud/vertexai": "^1.10.3",
+    "@google/generative-ai": "^0.24.1",
     "@types/helmet": "^0.0.48",
     "aes-js": "^3.1.2",
     "axios": "^1.14.0",

@@ -24,6 +24,7 @@ import sessionRoutes from './routes/session.mjs';
 import gameRoutes from './routes/game.mjs';
 import specRoutes from './routes/spec.mjs';
 import webhookRoutes from './routes/webhooks.mjs';
+import healthRoutes from './routes/health.mjs';
 
 const app = express();
 const port = process.env.PORT || 3000;

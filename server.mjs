@@ -27,6 +27,7 @@ import webhookRoutes from './routes/webhooks.mjs';
 import healthRoutes from './routes/health.mjs';
 
 const app = express();
+app.set('trust proxy', true); // Trust Cloudflare headers
 const port = process.env.PORT || 3000;
 
 // Global Security & Logging
@@ -41,7 +42,7 @@ app.use(cloudflareOnly); // Only allow Cloudflare IPs
 app.use(rateLimitMiddleware(100, 60)); // Global "burst" protection: 100 req/min
 
 // 1. Health & Infrastructure (Public)
-// app.use('/health', healthRoutes); // healthRoutes not imported? I'll skip it for now or check imports
+app.use('/health', healthRoutes); // System Status & Self-Healing
 app.use('/metrics', metricsRoutes);
 
 app.get('/', (req, res) => {

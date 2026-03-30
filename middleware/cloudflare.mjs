@@ -16,17 +16,25 @@ const CLOUDFLARE_IPS = [
 import ipRangeCheck from 'ip-range-check';
 
 export const cloudflareOnly = (req, res, next) => {
-    // Skip IP check in local development if needed, but in production, this is critical.
+    // Skip IP check in local development or if overridden
     if (process.env.NODE_ENV === 'development' || process.env.SKIP_CF_CHECK === 'true') {
         return next();
     }
 
-    const clientIp = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    // Capture the IP of the machine directly connecting to our Node.js server
+    // (This should be a Cloudflare IP in production)
+    const connectingIp = req.socket.remoteAddress || req.connection.remoteAddress;
 
-    if (ipRangeCheck(clientIp, CLOUDFLARE_IPS)) {
+    // Check if the connecting socket is a known Cloudflare IP
+    if (ipRangeCheck(connectingIp, CLOUDFLARE_IPS)) {
         next();
     } else {
-        console.warn(`SECURITY: Blocked attempt to bypass Cloudflare from IP: ${clientIp}`);
+        // Fallback: Some hosting environments might translate IPs, check CF Headers
+        if (req.headers['cf-ray'] || req.headers['cf-connecting-ip']) {
+            return next();
+        }
+
+        console.warn(`SECURITY: Blocked attempt to bypass Cloudflare from IP: ${connectingIp}`);
         res.status(403).json({
             error: true,
             code: 'FORBIDDEN',

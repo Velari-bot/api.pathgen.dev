@@ -109,20 +109,28 @@ export const validateFirestoreKey = (creditCost = 1, options = { requireBeta: fa
                 }
 
                 // 3. Conditional Credit Deduction (only if cost > 0)
-                if (creditCost > 0) {
+                let actualCreditCost = creditCost;
+                let actualUsdCost = usdCost;
+
+                if (tier === 'PRO' && actualCreditCost > 0) {
+                    actualCreditCost = Math.ceil(actualCreditCost * 0.75); // 25% Discount for PRO
+                    actualUsdCost = actualCreditCost / 100;
+                }
+
+                if (actualCreditCost > 0) {
                     const billingRef = adminDb.collection('billing').doc(email);
                     const billDoc = await transaction.get(billingRef);
                     const balance = billDoc.exists ? (billDoc.data().balance || 0) : 0;
 
-                    if (balance < usdCost) {
+                    if (balance < actualUsdCost) {
                         throw new Error("Insufficient Balance");
                     }
 
-                    const newBalance = Math.max(0, balance - usdCost);
+                    const newBalance = Math.max(0, balance - actualUsdCost);
                     transaction.update(billingRef, { balance: newBalance });
                 }
 
-                // 3. Log Activity for Dashboard
+                // 4. Log Activity for Dashboard
                 const latency = Date.now() - startTime;
                 const actRef = adminDb.collection('activities').doc();
                 
@@ -130,8 +138,9 @@ export const validateFirestoreKey = (creditCost = 1, options = { requireBeta: fa
                     orgId,
                     email,
                     appId: appId || 'external-gateway',
-                    credits: creditCost,
-                    usdCost: usdCost,
+                    credits: actualCreditCost,
+                    usdCost: actualUsdCost,
+                    tier: tier || 'FREE',
                     action: req.method + ' ' + req.path,
                     target: req.path,
                     status: 'success',

@@ -14,6 +14,7 @@
     "@google-cloud/vertexai": "^1.10.3",
     "@types/helmet": "^0.0.48",
     "aes-js": "^3.1.2",
+    "axios": "^1.14.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",

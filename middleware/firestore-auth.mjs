@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { adminDb } from '../lib/firebase/admin.mjs';
 
 /**
@@ -56,7 +57,7 @@ export async function deductCredits(email, creditCost, action, target = '/') {
     }
 }
 
-export const validateFirestoreKey = (creditCost = 1) => {
+export const validateFirestoreKey = (creditCost = 1, options = { requireBeta: false }) => {
     return async (req, res, next) => {
         let apiKey = req.query.key;
         
@@ -76,20 +77,38 @@ export const validateFirestoreKey = (creditCost = 1) => {
         const usdCost = creditCost / 100;
         const startTime = Date.now();
 
-        try {
-            const result = await adminDb.runTransaction(async (transaction) => {
-                // 1. Identity Lookup
-                const keyRef = adminDb.collection('api_keys').doc(apiKey);
-                const keyDoc = await transaction.get(keyRef);
-                
-                if (!keyDoc.exists) {
-                    throw new Error("Invalid Key");
-                }
+            try {
+                const result = await adminDb.runTransaction(async (transaction) => {
+                    // 1. Identity Lookup
+                    // We now hash the incoming key before document lookup to match our secure storage
+                    const hashedKey = crypto.createHash('sha256').update(apiKey).digest('hex');
+                    let keyRef = adminDb.collection('api_keys').doc(hashedKey);
+                    let keyDoc = await transaction.get(keyRef);
+                    
+                    // Fallback for Legacy (non-hashed) keys to prevent breaking existing users
+                    if (!keyDoc.exists) {
+                        const legacyRef = adminDb.collection('api_keys').doc(apiKey);
+                        const legacyDoc = await transaction.get(legacyRef);
+                        if (legacyDoc.exists) {
+                            keyRef = legacyRef;
+                            keyDoc = legacyDoc;
+                            console.warn(`SECURITY WARNING: Legacy raw API key used by ${legacyDoc.data().email}. Please rotate.`);
+                        }
+                    }
+
+                    if (!keyDoc.exists) {
+                        throw new Error("Invalid Key");
+                    }
 
                 const keyData = keyDoc.data();
-                const { email, orgId, appId } = keyData;
+                const { email, orgId, appId, betaAccess, tier } = keyData;
 
-                // 2. Conditional Credit Deduction (only if cost > 0)
+                // 2. Beta & Tier Access Check
+                if (options.requireBeta && tier !== 'PRO' && !betaAccess) {
+                    throw new Error("Upgrade Required");
+                }
+
+                // 3. Conditional Credit Deduction (only if cost > 0)
                 if (creditCost > 0) {
                     const billingRef = adminDb.collection('billing').doc(email);
                     const billDoc = await transaction.get(billingRef);
@@ -136,6 +155,23 @@ export const validateFirestoreKey = (creditCost = 1) => {
                     error: true,
                     code: 'INVALID_KEY',
                     message: 'Invalid API key'
+                });
+            }
+
+            if (err.message === "Upgrade Required") {
+                return res.status(403).json({
+                    error: true,
+                    code: 'UPGRADE_REQUIRED',
+                    tier: 'FREE',
+                    message: 'This feature (AI, Enhanced Replay, Webhooks) requires a PathGen PRO subscription. Upgrade at https://pathgen.dev/pricing'
+                });
+            }
+
+            if (err.message === "Beta Access Required") {
+                return res.status(403).json({
+                    error: true,
+                    code: 'BETA_ACCESS_REQUIRED',
+                    message: 'This endpoint is currently in Closed Beta. Please request access at https://pathgen.dev/beta'
                 });
             }
 

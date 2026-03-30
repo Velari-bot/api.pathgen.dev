@@ -1,10 +1,32 @@
 import { db } from '../lib/db.mjs';
+import { metrics } from '../lib/metrics.mjs';
 
 export const loggerMiddleware = async (req, res, next) => {
     const start = Date.now();
 
     res.on('finish', async () => {
         const duration = Date.now() - start;
+        const durationSeconds = duration / 1000;
+
+        // 1. Record basic HTTP metrics
+        metrics.httpRequestCounter.inc({
+            method: req.method,
+            route: req.baseUrl + req.route?.path || req.path,
+            status_code: res.statusCode
+        });
+
+        metrics.httpRequestDuration.observe({
+            method: req.method,
+            route: req.baseUrl + req.route?.path || req.path
+        }, durationSeconds);
+
+        // 2. Alert on security incidents specifically
+        if (res.statusCode === 401) {
+            metrics.securityAlertCounter.inc({ type: 'UNAUTHORIZED', reason: 'Invalid or missing API key' });
+        } else if (res.statusCode === 403) {
+            metrics.securityAlertCounter.inc({ type: 'FORBIDDEN', reason: 'Origin bypass attempt or access denied' });
+        }
+
         const logData = {
             id: 'req_' + Math.random().toString(36).substr(2, 9),
             timestamp: new Date().toISOString(),

@@ -1,128 +1,91 @@
 import express from 'express';
-import { 
-  generateCoach, 
-  generateSessionCoach, 
-  generateWeaponCoach, 
-  generateDropRecommendation, 
-  generateOpponentScout 
-} from '../lib/vertex.mjs';
-import { parseReplay } from '../core_parser.mjs';
 import { upload } from '../middleware/upload.mjs';
 import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
-import { getPlayerStats } from '../fortnite_api.mjs';
+import { parseReplay } from '../core_parser.mjs';
+import { 
+  analyzeMatch, 
+  coachMatch, 
+  coachSession, 
+  coachWeapons, 
+  recommendDrop, 
+  scoutOpponent, 
+  reviewRotation 
+} from '../lib/vertex.mjs';
 
 const router = express.Router();
 
-/**
- * POST /v1/ai/coach
- * 30 Credits
- */
-router.post('/coach', validateFirestoreKey(30), upload.single('replay'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No replay file provided' });
-  try {
-    const matchData = await parseReplay(req.file.buffer);
-    const aiData = await generateCoach(matchData);
+// Helper: Parse and Charge
+const processAIRequest = async (req, res, cost, aiFunction) => {
+    if (!req.file && !req.files) return res.status(400).json({ error: 'No replay file provided' });
     
-    res.json({
-      credits_used: 30,
-      credits_remaining: req.user.credits || 0,
-      data: {
-        match_summary: {
-          result: matchData.match_overview.result,
-          placement: matchData.match_overview.placement,
-          kills: matchData.combat_summary.eliminations.players
-        },
-        ai_analysis: aiData,
-        model: 'gemini-2.0-flash-001',
-        generated_at: new Date().toISOString()
-      }
-    });
-  } catch(e) {
-    res.status(500).json({ error: true, code: 'AI_GENERATION_FAILED', message: e.message });
-  }
-});
-
-/**
- * POST /v1/ai/session-coach
- * 50 Credits
- */
-router.post('/session-coach', validateFirestoreKey(50), upload.array('replays', 6), async (req, res) => {
-  if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No replay files provided' });
-  try {
-    const matches = await Promise.all(req.files.map(f => parseReplay(f.buffer)));
-    const aiData = await generateSessionCoach(matches);
-    
-    res.json({
-      credits_used: 50,
-      credits_remaining: req.user.credits || 0,
-      data: {
-        matches_analyzed: matches.length,
-        ai_analysis: aiData,
-        model: 'gemini-2.0-flash-001'
-      }
-    });
-  } catch(e) {
-    res.status(500).json({ error: true, code: 'AI_GENERATION_FAILED', message: e.message });
-  }
-});
-
-/**
- * POST /v1/ai/weapon-coach
- * 20 Credits
- */
-router.post('/weapon-coach', validateFirestoreKey(20), upload.single('replay'), async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No replay file provided' });
     try {
-        const matchData = await parseReplay(req.file.buffer);
-        const aiData = await generateWeaponCoach(matchData);
+        let stats;
+        if (req.file) {
+            const result = await parseReplay(req.file.buffer);
+            stats = await aiFunction(result);
+        } else if (req.files) {
+            const results = await Promise.all(req.files.map(f => parseReplay(f.buffer)));
+            stats = await aiFunction(results);
+        }
+
+        if (!stats) throw new Error('AI analysis failed');
+
         res.json({
-            credits_used: 20,
-            credits_remaining: req.user.credits || 0,
-            data: aiData
+            status: 200,
+            credits_used: cost,
+            credits_remaining: (req.user?.credits || 0) - cost,
+            data: stats
         });
-    } catch(e) {
-        res.status(500).json({ error: true, message: e.message });
+    } catch (err) {
+        console.error(`[AI Route Error]: ${err.message}`);
+        res.status(500).json({ status: 500, error: 'AI Processing Error', message: err.message });
     }
-});
+};
 
 /**
- * POST /v1/ai/drop-recommendation
- * 20 Credits
+ * AI Endpoints
  */
-router.post('/drop-recommendation', validateFirestoreKey(20), upload.single('replay'), async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No replay file provided' });
-    try {
-        const matchData = await parseReplay(req.file.buffer);
-        const aiData = await generateDropRecommendation(matchData);
-        res.json({
-            credits_used: 20,
-            credits_remaining: req.user.credits || 0,
-            data: aiData
-        });
-    } catch(e) {
-        res.status(500).json({ error: true, message: e.message });
-    }
+
+router.post('/analyze', validateFirestoreKey(15, { requireBeta: true }), upload.single('file'), async (req, res) => {
+    await processAIRequest(req, res, 15, analyzeMatch);
 });
 
-/**
- * POST /v1/ai/opponent-scout
- * 25 Credits
- */
-router.post('/opponent-scout', validateFirestoreKey(25), async (req, res) => {
+router.post('/coach', validateFirestoreKey(30, { requireBeta: true }), upload.single('file'), async (req, res) => {
+    await processAIRequest(req, res, 30, coachMatch);
+});
+
+router.post('/session-coach', validateFirestoreKey(50, { requireBeta: true }), upload.array('files', 6), async (req, res) => {
+    await processAIRequest(req, res, 50, coachSession);
+});
+
+router.post('/weapon-coach', validateFirestoreKey(20, { requireBeta: true }), upload.single('file'), async (req, res) => {
+    await processAIRequest(req, res, 20, async (data) => {
+        return coachWeapons(data.weapon_deep_dive || []);
+    });
+});
+
+router.post('/drop-recommend', validateFirestoreKey(20, { requireBeta: true }), upload.single('file'), async (req, res) => {
+    await processAIRequest(req, res, 20, async (data) => {
+        // Mocking historical drops for now or pulling from player profile
+        return recommendDrop(data.match_overview?.performance_metrics, []);
+    });
+});
+
+router.post('/opponent-scout', validateFirestoreKey(25, { requireBeta: true }), async (req, res) => {
     const { name } = req.body;
-    if (!name) return res.status(400).json({ error: 'Missing name parameter' });
+    if (!name) return res.status(400).json({ error: 'Missing opponent name' });
     try {
-        const stats = await getPlayerStats(name);
-        if (!stats) return res.status(404).json({ error: 'Player stats not found' });
-        const aiData = await generateOpponentScout(name, stats);
-        res.json({
-            credits_used: 25,
-            credits_remaining: req.user.credits || 0,
-            data: aiData
-        });
-    } catch(e) {
-        res.status(500).json({ error: true, message: e.message });
+        const scout = await scoutOpponent(name, []); // Fetch history from Osirion later
+        res.json({ status: 200, credits_used: 25, data: scout });
+    } catch (err) {
+        res.status(500).json({ error: 'Scouting failed' });
     }
+});
+
+router.post('/rotation-review', validateFirestoreKey(15, { requireBeta: true }), upload.single('file'), async (req, res) => {
+    await processAIRequest(req, res, 15, async (data) => {
+        return reviewRotation(data.rotation_score || {});
+    });
 });
 
 export default router;

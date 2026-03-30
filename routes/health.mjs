@@ -1,5 +1,6 @@
 import express from 'express';
 import { db } from '../lib/db.mjs';
+import { getAESKey } from '../lib/aes.mjs';
 
 const router = express.Router();
 
@@ -19,6 +20,8 @@ router.get('/detailed', async (req, res) => {
         dbStatus = 'unhealthy';
     }
 
+    const keyInfo = await getAESKey();
+
     res.json({
         status: 'ok',
         uptime_seconds: Math.floor(process.uptime()),
@@ -27,7 +30,13 @@ router.get('/detailed', async (req, res) => {
             parser: { status: 'ok', avg_parse_ms: 842 }, // Example value, needs real tracking
             database: { status: dbStatus, latency_ms: dbLatency },
             storage: { status: 'ok', provider: 'cloudflare-r2' },
-            fortnite_api: { status: 'ok', last_check: new Date().toISOString() }
+            fortnite_api: { status: 'ok', last_check: new Date().toISOString() },
+            aes_key: {
+                status: 'ok',
+                version: keyInfo.version,
+                source: keyInfo.source,
+                key: keyInfo.key.substring(0, 10) + '...'
+            }
         }
     });
 });

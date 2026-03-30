@@ -76,13 +76,16 @@ export const fortniteLib = {
     // 1. Account & Stats
     getStats: (name, timeWindow = 'lifetime') => fetchWithCache(`/v2/stats/br/v2?name=${encodeURIComponent(name)}&timeWindow=${timeWindow}`, 1800),
     getStatsById: (id, timeWindow = 'lifetime') => fetchWithCache(`/v2/stats/br/v2/${id}?timeWindow=${timeWindow}`, 1800),
-    
+    getCreatorCode: (name) => fetchWithCache(`/v2/creatorcode?name=${encodeURIComponent(name)}`, 86400),
+
     // 2. Map
     getMap: () => fetchWithCache('/v1/map', 86400),
     
     // 3. News
     getNews: () => fetchWithCache('/v2/news', 3600),
     getBRNews: () => fetchWithCache('/v2/news/br', 3600),
+    getSTWNews: () => fetchWithCache('/v2/news/stw', 3600),
+    getCreativeNews: () => fetchWithCache('/v2/news/creative', 3600),
     
     // 4. Shop
     getShop: () => fetchWithCache('/v2/shop', 1800),
@@ -91,12 +94,25 @@ export const fortniteLib = {
     getPlaylists: () => fetchWithCache('/v1/playlists', 86400),
     getPlaylistById: (id) => fetchWithCache(`/v1/playlists/${id}`, 86400),
     
-    // 6. Cosmetics
+    // 6. Cosmetics (All Categories)
     getCosmetics: () => fetchWithCache('/v2/cosmetics', 86400),
     getNewCosmetics: () => fetchWithCache('/v2/cosmetics/new', 3600),
     getBRCosmetics: () => fetchWithCache('/v2/cosmetics/br', 86400),
+    getTracks: () => fetchWithCache('/v2/cosmetics/tracks', 86400),
+    getInstruments: () => fetchWithCache('/v2/cosmetics/instruments', 86400),
+    getCars: () => fetchWithCache('/v2/cosmetics/cars', 86400),
+    getLego: () => fetchWithCache('/v2/cosmetics/lego', 86400),
+    getLegoKits: () => fetchWithCache('/v2/cosmetics/lego/kits', 86400),
+    getBeans: () => fetchWithCache('/v2/cosmetics/beans', 86400),
+    
     getCosmeticById: (id) => fetchWithCache(`/v2/cosmetics/br/${id}`, 86400),
-    searchCosmetic: (query) => fetchWithCache(`/v2/cosmetics/br/search?${new URLSearchParams(query)}`, 3600)
+    searchCosmetic: (query) => fetchWithCache(`/v2/cosmetics/br/search?${new URLSearchParams(query)}`, 3600),
+    searchCosmeticsAll: (query) => fetchWithCache(`/v2/cosmetics/br/search/all?${new URLSearchParams(query)}`, 3600),
+    searchCosmeticsIds: (ids) => fetchWithCache(`/v2/cosmetics/br/search/ids?ids=${Array.isArray(ids) ? ids.join(',') : ids}`, 86400),
+
+    // 7. Banners
+    getBanners: () => fetchWithCache('/v1/banners', 86400),
+    getBannerColors: () => fetchWithCache('/v1/banners/colors', 86400)
 };
 
 // Legacy support for getPlayerStats

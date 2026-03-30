@@ -1,4 +1,4 @@
-import express from 'express';
+import crypto from 'crypto';
 import { adminDb } from '../lib/firebase/admin.mjs';
 import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
 import { getPlayerStats, fortniteLib } from '../fortnite_api.mjs';
@@ -26,7 +26,10 @@ router.get('/keys', validateFirestoreKey(0), async (req, res) => {
         
         const keys = keysSnap.docs.map(doc => ({
             key_id: doc.id,
-            ...doc.data()
+            name: doc.data().name,
+            last4: doc.data().last4 || '****',
+            created_at: doc.data().created_at,
+            lastUsed: doc.data().lastUsed
         }));
         res.json({ keys });
     } catch(err) {
@@ -37,7 +40,14 @@ router.get('/keys', validateFirestoreKey(0), async (req, res) => {
 
 router.post('/keys', validateFirestoreKey(0), async (req, res) => {
     const { name, appId } = req.body;
-    const key = `rs_${Math.random().toString(36).substr(2, 10)}${Math.random().toString(36).substr(2, 10)}`;
+    
+    // 1. Generate raw 32-character secure key
+    const rawKey = `rs_${crypto.randomBytes(16).toString('hex')}`;
+    const last4 = rawKey.slice(-4);
+    
+    // 2. Hash the key for storage (using SHA-256 for lookup index)
+    const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+
     try {
         const keysSnap = await adminDb.collection('api_keys')
             .where('email', '==', req.user.email)
@@ -46,17 +56,28 @@ router.post('/keys', validateFirestoreKey(0), async (req, res) => {
             return res.status(403).json({ error: 'Key limit reached. Maximum 5 keys per account.' });
         }
 
-        const keyData = {
+        const keyMetadata = {
             email: req.user.email,
             orgId: req.user.orgId || 'personal',
             appId: appId || 'default-app',
             name: name || 'New API Key',
+            last4: last4,
             created_at: new Date().toISOString(),
             lastUsed: null
         };
-        await adminDb.collection('api_keys').doc(key).set(keyData);
-        res.status(201).json({ key_id: key, ...keyData });
+
+        // We store by the HASH so we can look it up instantly during auth, 
+        // but no one viewing the DB can see the original key.
+        await adminDb.collection('api_keys').doc(hashedKey).set(keyMetadata);
+
+        // ONLY return the rawKey once!
+        res.status(201).json({ 
+            key: rawKey,
+            last4: last4,
+            ...keyMetadata 
+        });
     } catch(err) {
+        console.error('Error creating API key:', err);
         res.status(500).json({ error: 'Could not create key' });
     }
 });

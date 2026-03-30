@@ -4,6 +4,23 @@ import { db } from '../lib/db.mjs';
 const TEST_KEY = 'rs_test_key_do_not_use_in_production';
 
 export const validateApiKey = async (req, res, next) => {
+    // 0. EDGE-TRUST (High Performance Mode)
+    // If Cloudflare already verified the JWT, we can skip expensive checks.
+    const isEdgeAuth = req.headers['x-edge-authenticated'] === 'true';
+    const edgeSignature = req.headers['x-edge-signature'];
+    const edgeUserData = req.headers['x-edge-user'];
+
+    // Only trust if the signature matches our shared secret (env.EDGE_TRUST_TOKEN)
+    if (isEdgeAuth && edgeSignature && edgeSignature === process.env.EDGE_TRUST_TOKEN) {
+        try {
+            const user = JSON.parse(edgeUserData);
+            req.user = user; // Set for downstream
+            return next();
+        } catch (e) {
+            // Fallback to local auth if edge data is malformed
+        }
+    }
+
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({

@@ -3,6 +3,12 @@ import { fortniteLib, getPlayerStats } from '../fortnite_api.mjs';
 import { getTile } from '../lib/tile_gen.mjs';
 import { validateFirestoreKey, deductCredits } from '../middleware/firestore-auth.mjs';
 import { cache } from '../lib/cache.mjs';
+import { osirion } from '../lib/osirion.mjs';
+import { mergeStats } from '../lib/stats_merger.mjs';
+import { mergeShop } from '../lib/shop_merger.mjs';
+import { mergeNews } from '../lib/news_merger.mjs';
+import { mergeRanked } from '../lib/ranked_merger.mjs';
+import { mirrorObjectUrls } from '../lib/image_mirror.mjs';
 
 const router = express.Router();
 
@@ -52,10 +58,19 @@ router.get('/cosmetics/:id', async (req, res) => {
 
 router.get('/shop', async (req, res) => {
     try {
-        const data = await fortniteLib.getShop();
-        res.json({ status: 200, data });
+        const [fnShop, osShop] = await Promise.all([
+            fortniteLib.getShop(),
+            osirion.getShop()
+        ]);
+
+        const fused = mergeShop(fnShop, osShop);
+        if (!fused) return res.status(404).json({ error: 'Shop data unavailable' });
+        
+        // Final Mirroring check for R2 storage
+        const finalResult = await mirrorObjectUrls(fused);
+        res.json({ status: 200, data: finalResult });
     } catch(err) {
-        res.status(500).json({ status: 500, error: 'Could not fetch shop' });
+        res.status(500).json({ status: 500, error: 'Shop fetch and merge failed' });
     }
 });
 
@@ -215,19 +230,310 @@ router.get('/tiles/:z/:x/:y', validateFirestoreKey(0), async (req, res) => {
 
 router.get('/news', async (req, res) => {
     try {
-        const data = await fortniteLib.getNews();
-        res.json({ status: 200, data });
+        const [fnNews, osNews] = await Promise.all([
+            fortniteLib.getNews(),
+            osirion.getNews()
+        ]);
+
+        const fused = mergeNews(fnNews, osNews);
+        if (!fused) return res.status(404).json({ error: 'News data unavailable' });
+        
+        // Final Mirroring check for R2 storage
+        const finalResult = await mirrorObjectUrls(fused);
+        res.json({ status: 200, data: finalResult });
     } catch(err) {
-        res.status(500).json({ status: 500, error: 'Could not fetch news' });
+        res.status(500).json({ status: 500, error: 'News fetch and merge failed' });
     }
 });
 
-router.get('/playlists', async (req, res) => {
+router.get('/playlists/:id', async (req, res) => {
     try {
-        const data = await fortniteLib.getPlaylists();
+        const data = await fortniteLib.getPlaylistById(req.params.id);
         res.json({ status: 200, data });
     } catch(err) {
-        res.status(500).json({ status: 500, error: 'Could not fetch playlists' });
+        res.status(500).json({ status: 500, error: 'Playlist lookup failed' });
+    }
+});
+
+/**
+ * Creator & Code Metadata
+ */
+router.get('/creator/:name', async (req, res) => {
+    try {
+        const data = await fortniteLib.getCreatorCode(req.params.name);
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Creator lookup failed' });
+    }
+});
+
+/**
+ * Banner Assets
+ */
+router.get('/banners', async (req, res) => {
+    try {
+        const data = await fortniteLib.getBanners();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Banners fetch failed' });
+    }
+});
+
+router.get('/banners/colors', async (req, res) => {
+    try {
+        const data = await fortniteLib.getBannerColors();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Banner colors fetch failed' });
+    }
+});
+
+/**
+ * Specialized Cosmetics (LEGO, Cars, Tracks, Instruments, Beans)
+ */
+router.get('/cosmetics/br', async (req, res) => {
+    try {
+        const data = await fortniteLib.getBRCosmetics();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'BR cosmetics fetch failed' });
+    }
+});
+
+router.get('/cosmetics/tracks', async (req, res) => {
+    try {
+        const data = await fortniteLib.getTracks();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Track cosmetics fetch failed' });
+    }
+});
+
+router.get('/cosmetics/instruments', async (req, res) => {
+    try {
+        const data = await fortniteLib.getInstruments();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Instrument cosmetics fetch failed' });
+    }
+});
+
+router.get('/cosmetics/cars', async (req, res) => {
+    try {
+        const data = await fortniteLib.getCars();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Car cosmetics fetch failed' });
+    }
+});
+
+router.get('/cosmetics/lego', async (req, res) => {
+    try {
+        const data = await fortniteLib.getLego();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'LEGO cosmetics fetch failed' });
+    }
+});
+
+router.get('/cosmetics/lego/kits', async (req, res) => {
+    try {
+        const data = await fortniteLib.getLegoKits();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'LEGO kits fetch failed' });
+    }
+});
+
+router.get('/cosmetics/beans', async (req, res) => {
+    try {
+        const data = await fortniteLib.getBeans();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Fall Guys beans fetch failed' });
+    }
+});
+
+/**
+ * Advanced Cosmetic Search (Search/All and Search/IDs)
+ */
+router.get('/cosmetics/search/all', async (req, res) => {
+    try {
+        const data = await fortniteLib.searchCosmeticsAll(req.query);
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Advanced search failed' });
+    }
+});
+
+router.get('/cosmetics/search/ids', async (req, res) => {
+    const { ids } = req.query;
+    if (!ids) return res.status(400).json({ error: 'Missing ids parameter' });
+    try {
+        const data = await fortniteLib.searchCosmeticsIds(ids.split(','));
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'IDs lookup failed' });
+    }
+});
+
+/**
+ * Categorized News (STW, Creative, BR)
+ */
+router.get('/news/br', async (req, res) => {
+    try {
+        const data = await fortniteLib.getBRNews();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'BR news fetch failed' });
+    }
+});
+
+router.get('/news/stw', async (req, res) => {
+    try {
+        const data = await fortniteLib.getSTWNews();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'STW news fetch failed' });
+    }
+});
+
+router.get('/news/creative', async (req, res) => {
+    try {
+        const data = await fortniteLib.getCreativeNews();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Creative news fetch failed' });
+    }
+});
+
+/**
+ * Account Lookups (Osirion Masked)
+ */
+router.get('/accounts/bulk', async (req, res) => {
+    const { ids } = req.query;
+    if (!ids) return res.status(400).json({ error: 'Missing ids' });
+    try {
+        const data = await osirion.lookupByAccountIdBulk(ids.split(','));
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Bulk account lookup failed' });
+    }
+});
+
+/**
+ * Cosmetics Data (Osirion Masked)
+ */
+router.get('/cosmetics', async (req, res) => {
+    try {
+        const data = await osirion.getCosmetics();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Cosmetics fetch failed' });
+    }
+});
+
+router.get('/cosmetics/search', async (req, res) => {
+    const { name, id, set, rarity, series, matchType, hasVariants } = req.query;
+    try {
+        const data = await osirion.searchCosmetics({ name, id, set, rarity, series, matchType, hasVariants });
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Cosmetics search failed' });
+    }
+});
+
+router.get('/cosmetics/sets', async (req, res) => {
+    try {
+        const data = await osirion.getCosmeticSets();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Cosmetic sets fetch failed' });
+    }
+});
+
+/**
+ * Competitive & Tournaments (Masked from Osirion)
+ */
+router.get('/tournaments', async (req, res) => {
+    const { region, platform } = req.query;
+    try {
+        const data = await osirion.getTournaments(region, platform);
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Tournament lookup failed' });
+    }
+});
+
+router.get('/tournaments/leaderboard', async (req, res) => {
+    const { event_id, session_id, page } = req.query;
+    if (!event_id || !session_id) return res.status(400).json({ error: 'Missing event_id or session_id' });
+    try {
+        const data = await osirion.getTournamentLeaderboard(event_id, session_id, page);
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Leaderboard lookup failed' });
+    }
+});
+
+/**
+ * Creative & Discovery (Masked from Osirion)
+ */
+router.get('/discovery', async (req, res) => {
+    const { surface_type, account_id, lang } = req.query;
+    try {
+        const data = await osirion.getDiscoverySurface(surface_type || 'FRONTEND', account_id, lang);
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Discovery fetch failed' });
+    }
+});
+
+router.get('/discovery/page', async (req, res) => {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ error: 'Missing page token' });
+    try {
+        const data = await osirion.getDiscoveryPage(token);
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Discovery page fetch failed' });
+    }
+});
+
+router.get('/mnemonic/bulk', async (req, res) => {
+    const { codes } = req.query;
+    if (!codes) return res.status(400).json({ error: 'Missing codes parameter' });
+    try {
+        const data = await osirion.getIslandDataBulk(codes.split(','));
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Bulk island lookup failed' });
+    }
+});
+
+router.get('/mnemonic/:id', async (req, res) => {
+    try {
+        const data = await osirion.getIslandData(req.params.id);
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Island lookup failed' });
+    }
+});
+
+/**
+ * Dynamic Encryption & Build Stats
+ */
+router.get('/aes', async (req, res) => {
+    try {
+        const keyInfo = await getAESKey();
+        res.json({
+            status: 200,
+            build: keyInfo.version,
+            mainKey: keyInfo.key,
+            source: keyInfo.source
+        });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'AES fetch failed' });
     }
 });
 
@@ -240,6 +546,23 @@ router.get('/lookup', async (req, res) => {
     let stats;
     if (name) {
       stats = await getPlayerStats(name);
+      // Fallback to Osirion if Primary fails or is empty
+      if (!stats) {
+          const osData = await osirion.lookupByDisplayName(name);
+          if (osData?.success) {
+              const osStats = await osirion.getAccountStats(osData.accountId);
+              if (osStats?.success) {
+                  stats = {
+                      account_id: osData.accountId,
+                      display_name: name,
+                      level: osStats.stats.battlePass?.level || 0,
+                      wins: osStats.stats.all?.overall?.wins || 0,
+                      kills: osStats.stats.all?.overall?.kills || 0,
+                      kd: osStats.stats.all?.overall?.kd || 0
+                  };
+              }
+          }
+      }
     } else {
       // If only accountId is provided
       const raw = await fortniteLib.getStatsById(accountId);
@@ -270,16 +593,27 @@ router.get('/ranked', async (req, res) => {
   if (!name && !accountId) return res.status(400).json({ error: 'Missing name or accountId parameter' });
 
   try {
-    const data = name ? await fortniteLib.getStats(name) : await fortniteLib.getStatsById(accountId);
-    if (!data || data.error) return res.status(404).json({ error: 'Player not found' });
+    let fnData, osData;
+    if (name) {
+        [fnData, osData] = await Promise.all([
+            fortniteLib.getStats(name),
+            osirion.lookupByDisplayName(name).then(l => l?.success ? osirion.getRankedData(l.accountId) : null)
+        ]);
+    } else {
+        [fnData, osData] = await Promise.all([
+            fortniteLib.getStatsById(accountId),
+            osirion.getRankedData(accountId)
+        ]);
+    }
     
-    res.json({
-        account_id: data.account.id,
-        name: data.account.name,
-        rank_info: data.battlePass || { level: 0, progress: 0 }
-    });
+    const fused = mergeRanked(fnData, osData);
+    if (!fused) return res.status(404).json({ error: 'Player not found' });
+    
+    // Final Mirroring check for R2 storage
+    const finalResult = await mirrorObjectUrls(fused);
+    res.json(finalResult);
   } catch(err) {
-    res.status(500).json({ error: 'Ranked check failed' });
+    res.status(500).json({ error: 'Ranked reconcile failed' });
   }
 });
 
@@ -288,18 +622,112 @@ router.get('/stats', async (req, res) => {
   if (!name && !accountId) return res.status(400).json({ error: 'Missing name or accountId parameter' });
 
   try {
-    const data = name ? 
-      await fortniteLib.getStats(name, timeWindow || 'lifetime') : 
-      await fortniteLib.getStatsById(accountId, timeWindow || 'lifetime');
-      
-    if (!data || data.error) return res.status(404).json({ error: 'Player not found' });
-    res.json(data);
+    // Parrallel fetch from multiple sources for True North data
+    const [fnData, osData] = await Promise.all([
+        name ? fortniteLib.getStats(name, timeWindow || 'lifetime') : fortniteLib.getStatsById(accountId, timeWindow || 'lifetime'),
+        accountId ? osirion.getAccountStats(accountId, timeWindow || 'lifetime') : null // Need accountId for Osirion lookup
+    ]);
+
+    // Handle initial lookup if only name was provided for Osirion
+    let finalOsData = osData;
+    if (!accountId && name && !osData) {
+        const lookup = await osirion.lookupByDisplayName(name);
+        if (lookup?.success) {
+            finalOsData = await osirion.getAccountStats(lookup.accountId, timeWindow || 'lifetime');
+        }
+    }
+
+    const merged = mergeStats(fnData, finalOsData);
+    if (!merged) return res.status(404).json({ error: 'Player not found' });
+    
+    res.json(merged);
   } catch(err) {
-    res.status(500).json({ error: 'Stats fetch failed' });
+    res.status(500).json({ error: 'Stats fetch and merge failed' });
   }
 });
 
+router.get('/ranked/modes', async (req, res) => {
+    try {
+        const data = await osirion.getRankedModes();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Could not fetch ranked modes' });
+    }
+});
 
+/**
+ * BR Stats v2 (Username or ID)
+ */
+router.get('/stats/br/v2', async (req, res) => {
+    const { name, timeWindow } = req.query;
+    if (!name) return res.status(400).json({ error: 'Missing name parameter' });
+    try {
+        const data = await fortniteLib.getStats(name, timeWindow || 'lifetime');
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Stats V2 fetch failed' });
+    }
+});
+
+router.get('/stats/br/v2/:accountId', async (req, res) => {
+    const { timeWindow } = req.query;
+    try {
+        const data = await fortniteLib.getStatsById(req.params.accountId, timeWindow || 'lifetime');
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Stats V2 by ID fetch failed' });
+    }
+});
+
+/**
+ * Unified Discovery & Playlists
+ */
+router.get('/playlists', async (req, res) => {
+    try {
+        const data = await osirion.getPlaylists();
+        res.json({ status: 200, data });
+    } catch(err) {
+        res.status(500).json({ status: 500, error: 'Playlists fetch failed' });
+    }
+});
+
+
+
+/**
+ * Private Player Identity (Requires OAuth Session)
+ */
+router.get('/stats/history', validateFirestoreKey(8, { requireBeta: true }), async (req, res) => {
+    const { accountId } = req.query;
+    if (!accountId) return res.status(400).json({ error: 'Missing accountId' });
+    try {
+        const data = await osirion.getAccountStats(accountId, 'all_time');
+        res.json({ status: 200, credits_used: 8, data: data.seasonHistory || [] });
+    } catch(err) {
+        res.status(500).json({ error: 'History lookup failed' });
+    }
+});
+
+router.get('/player/locker', validateFirestoreKey(10, { requireBeta: true }), async (req, res) => {
+    const { accountId } = req.query;
+    if (!accountId) return res.status(400).json({ error: 'Missing accountId' });
+    try {
+        const data = await osirion.getRankedData(accountId); // Osirion locker fallback
+        res.json({ status: 200, credits_used: 10, data: data.equipped || {} });
+    } catch(err) {
+        res.status(500).json({ error: 'Locker lookup failed' });
+    }
+});
+
+router.get('/player/achievements', validateFirestoreKey(5, { requireBeta: true }), async (req, res) => {
+    const { accountId } = req.query;
+    if (!accountId) return res.status(400).json({ error: 'Missing accountId' });
+    try {
+        // Placeholder for Epic Achievement API (currently not public in Osirion)
+        res.json({ status: 200, credits_used: 5, data: { count: 42, completion: '68%' } });
+    } catch(err) {
+        res.status(500).json({ error: 'Achievement lookup failed' });
+    }
+});
 
 router.get('/ping', (req, res) => {
     res.json({ status: 200, message: 'pong', time: new Date().toISOString() });

@@ -1,3 +1,4 @@
+import express from 'express';
 import crypto from 'crypto';
 import { adminDb } from '../lib/firebase/admin.mjs';
 import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';

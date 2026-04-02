@@ -27,8 +27,16 @@ import webhookRoutes from './routes/webhooks.mjs';
 import healthRoutes from './routes/health.mjs';
 
 const app = express();
-app.set('trust proxy', true); // Trust Cloudflare headers
+app.set('trust proxy', true); 
 const port = process.env.PORT || 3000;
+
+// Environment Validation
+const REQUIRED_VARS = ['FIREBASE_SERVICE_ACCOUNT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME'];
+REQUIRED_VARS.forEach(v => {
+    if (!process.env[v]) console.error(`[CRITICAL] Missing Required Environment Variable: ${v}`);
+});
+if (!process.env.GOOGLE_AI_KEY) console.warn(`[WARNING] Missing GOOGLE_AI_KEY. AI Coaching endpoints will return 500.`);
+if (!process.env.DATABASE_URL) console.warn(`[WARNING] Missing DATABASE_URL. Legacy PostgreSQL Auth will be unavailable.`);
 
 // Global Security & Logging
 app.use(helmet()); 
@@ -47,7 +55,7 @@ app.use('/metrics', metricsRoutes);
 
 app.get('/', (req, res) => {
     res.type('text/plain');
-    res.send("PathGen API Server. This is for developer integrations only. If you're looking for the platform, visit https://platform.pathgen.dev");
+    res.send("PathGen API Server (v1.2.6). Developed by Wrench Develops (https://x.com/WrenchDevelops). Visit https://platform.pathgen.dev for documentation.");
 });
 
 app.get('/debug', (req, res) => {
@@ -63,21 +71,25 @@ app.get('/robots.txt', (req, res) => {
 app.use('/logs', logsRoutes);
 
 // 3. API Version 1
+// Pro-tier endpoints (Replay Enrichment & AI)
+app.use('/v1/ai', rateLimitMiddleware(2000, 60), aiRoutes);
+app.use('/v1/replay/enhanced', rateLimitMiddleware(2000, 60), enhancedReplayRoutes);
+
 // Paid endpoints (Replay & Session) require credit check and strict rate limiting
+// POST /v1/replay/download-and-parse  25 credits
+// POST /v1/replay/match-info           5 credits
+// POST /v1/session/auto-analyze       75 credits
 app.use('/v1/replay', rateLimitMiddleware(10, 60), replayRoutes);
-app.use('/v1/replay/enhanced', rateLimitMiddleware(10, 60), enhancedReplayRoutes);
 app.use('/v1/session', rateLimitMiddleware(10, 60), sessionRoutes);
-app.use('/v1/ai', rateLimitMiddleware(5, 60), aiRoutes);
 
 // Free / Low-tier endpoints
-app.use('/v1/auth', authRoutes);
-app.use('/v1/account', accountRoutes);
-app.use('/v1/billing', rateLimitMiddleware(5, 60), billingRoutes);
+app.use('/v1/auth', rateLimitMiddleware(10, 60), authRoutes);
+app.use('/v1/account', rateLimitMiddleware(60, 60), accountRoutes);
+app.use('/v1/billing', rateLimitMiddleware(10, 60), billingRoutes);
 app.use('/v1/game', rateLimitMiddleware(60, 60), gameRoutes);
-app.use('/v1/spec', specRoutes); // OpenAPI JSON
-app.use('/v1/webhooks', webhookRoutes); // Developer Push Notifs
+app.use('/v1/spec', rateLimitMiddleware(2000, 60), specRoutes); // OpenAPI JSON
+app.use('/v1/webhooks', rateLimitMiddleware(2000, 60), webhookRoutes); // Developer Push Notifs
 app.use('/v1/epic', epicOAuthRoutes); // Epic Account Integration
-app.use('/v1', gameRoutes); // Root alias for compatibility (e.g., /v1/map, /v1/lookup)
 
 // Assets (Redirect to Cloudflare R2 for performance)
 app.use('/tiles', (req, res) => {
@@ -87,10 +99,13 @@ app.use('/tiles', (req, res) => {
 
 // 404 Handler (JSON for everything except documentation/main site)
 app.use((req, res) => {
+    const isAsset = req.path.endsWith('.js') || req.path.endsWith('.css') || req.path.endsWith('.png');
+    
     res.status(404).json({
         error: true,
         code: 'NOT_FOUND',
-        message: `Endpoint ${req.method} ${req.originalUrl} not found. Check the documentation for valid routes.`
+        message: `Endpoint ${req.method} ${req.originalUrl} not found.`,
+        hint: isAsset ? "This is an API server. Assets should be loaded from your frontend or platform domain." : "Check the OpenAPI spec at /v1/spec for valid routes."
     });
 });
 

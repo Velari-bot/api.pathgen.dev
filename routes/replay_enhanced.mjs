@@ -13,7 +13,7 @@ router.post('/heatmap', validateFirestoreKey(15, { requireBeta: true }), upload.
     if (!req.file) return res.status(400).json({ error: 'No replay file provided' });
     try {
         const result = await parseReplay(req.file.buffer);
-        const positions = result.all_tracks || [];
+        const positions = result.movement?.player_track || [];
         
         // Generate a 64x64 density grid for the Fortnite map coordinates (-131072 to 131072)
         const gridSize = 64;
@@ -46,13 +46,13 @@ router.post('/timeline', validateFirestoreKey(10, { requireBeta: true }), upload
         const timeline = [];
         
         // Storm
-        (result.match_overview?.storm_phases || []).forEach(s => {
-            timeline.push({ type: 'storm', time: s.start_time, event: `Storm Phase ${s.phase_index} started` });
+        (result.storm || []).forEach(s => {
+            timeline.push({ type: 'storm', time: s.timestamp_ms, event: `Storm Phase ${s.phase} started (radius: ${Math.round(s.radius_cm / 100)}m)` });
         });
         
         // Kills
-        (result.combat_summary?.eliminations?.detailed || []).forEach(k => {
-            timeline.push({ type: 'kill', time: k.timestamp, event: `Eliminated ${k.victim_name} with ${k.weapon}` });
+        (result.elim_feed || []).forEach(k => {
+            timeline.push({ type: 'kill', time: k.timestamp_ms, event: `Elimination recorded` });
         });
         
         // Sort by time

@@ -9,6 +9,7 @@ import { db } from '../lib/db.mjs';
 import { getAccessTokenForUser } from '../lib/epic_token_manager.mjs';
 import { getRankedData, getCrownWins } from '../lib/epic_data.mjs';
 import { mirrorObjectUrls } from '../lib/image_mirror.mjs';
+import { downloadFullReplay, getReplayManifest } from '../lib/replay_downloader.mjs';
 
 
 const router = express.Router();
@@ -295,6 +296,173 @@ router.post('/opponents', validateFirestoreKey(30), upload.single('replay'), asy
         }, 30, storageUrl));
     } catch(err) {
         res.status(500).json({ error: true, code: 'PARSE_FAILED', message: err.message });
+    }
+});
+
+
+// SERVER REPLAY ENDPOINTS
+// ─────────────────────────────────────────────────
+// These endpoints download replay files directly
+// from Epic's game servers using a match ID.
+//
+// Server replays are available for:
+//   - Tournament matches (FNCS, Cash Cups, etc.)
+//   - Some ranked matches
+//   - Any match Epic's servers chose to record
+//
+// Server replays are NOT available for:
+//   - Regular public matches
+//   - Creative mode
+//   - Custom lobbies
+//
+// Advantages over client upload:
+//   - No file upload required — fully automated
+//   - Server-side data is more complete
+//   - All 100 players captured neutrally
+//   - No client-side packet drops
+//
+// Requirements:
+//   - User must connect Epic account via
+//     POST /v1/epic/connect first
+//   - Epic access token must be valid
+//   - Match must have a server replay stored
+
+/**
+ * POST /v1/replay/match-info
+ * Cost: 5 credits
+ * Returns metadata for a server match ID
+ */
+router.post('/match-info', validateFirestoreKey(5), async (req, res) => {
+    const { matchId } = req.body;
+
+    if (!matchId) {
+        return res.status(400).json({ error: true, code: 'MISSING_MATCH_ID', message: 'Match ID is required' });
+    }
+
+    const uuidRegex = /^[0-9a-f]{32}$/i;
+    if (!uuidRegex.test(matchId)) {
+        return res.status(400).json({ error: true, code: 'INVALID_MATCH_ID', message: 'Invalid match ID format' });
+    }
+
+    try {
+        const accessToken = await getAccessTokenForUser(req.user.email);
+        if (!accessToken) {
+            return res.status(400).json({ 
+                error: true, 
+                code: 'EPIC_NOT_CONNECTED', 
+                message: 'Connect your Epic account first at GET /v1/epic/auth-url' 
+            });
+        }
+
+        const manifest = await getReplayManifest(matchId, accessToken);
+        
+        const data = {
+            matchId: matchId,
+            exists: true,
+            timestamp: manifest.Timestamp,
+            lengthInMs: manifest.LengthInMS,
+            isLive: manifest.bIsLive,
+            isCompressed: manifest.bCompressed,
+            networkVersion: manifest.NetworkVersion,
+            chunkCounts: {
+                data: manifest.DataChunks?.length || 0,
+                events: manifest.Events?.length || 0,
+                checkpoints: manifest.Checkpoints?.length || 0
+            },
+            estimatedSizeMb: parseFloat((manifest.FileSize / 1024 / 1024).toFixed(2)),
+            canParse: !manifest.bIsLive
+        };
+
+        res.json({
+            credits_used: 5,
+            credits_remaining: req.user.credits || 0,
+            data
+        });
+
+    } catch (err) {
+        if (err.status === 404 || err.message === 'REPLAY_NOT_FOUND') {
+            return res.status(404).json({ error: true, code: 'REPLAY_NOT_FOUND', message: 'Replay not found for this match ID' });
+        }
+        res.status(500).json({ error: true, code: 'DOWNLOAD_FAILED', message: err.message });
+    }
+});
+
+/**
+ * POST /v1/replay/download-and-parse
+ * Cost: 25 credits
+ * Full automation — downloads from Epic and parses
+ */
+router.post('/download-and-parse', validateFirestoreKey(25), async (req, res) => {
+    const { matchId } = req.body;
+
+    if (!matchId) {
+        return res.status(400).json({ error: true, code: 'MISSING_MATCH_ID', message: 'Match ID is required' });
+    }
+
+    const uuidRegex = /^[0-9a-f]{32}$/i;
+    if (!uuidRegex.test(matchId)) {
+        return res.status(400).json({ error: true, code: 'INVALID_MATCH_ID', message: 'Invalid match ID format' });
+    }
+
+    try {
+        const downloadStart = Date.now();
+        const accessToken = await getAccessTokenForUser(req.user.email);
+        if (!accessToken) {
+            return res.status(400).json({ 
+                error: true, 
+                code: 'EPIC_NOT_CONNECTED', 
+                message: 'Connect your Epic account first at GET /v1/epic/auth-url' 
+            });
+        }
+
+        const { buffer, manifest } = await downloadFullReplay(matchId, accessToken);
+        const downloadTime = Date.now() - downloadStart;
+
+        const parseStart = Date.now();
+        const result = await parseReplay(buffer);
+        const parseTime = Date.now() - parseStart;
+
+        // Enrichment
+        const local = result.scoreboard.find(p => p.is_local_player);
+        if (local?.name) {
+            const pd = await getPlayerStats(local.name);
+            if (pd) {
+                result.epic_data = pd;
+            }
+        }
+
+        // Final Mirroring for R2 storage (optional, user didn't explicitly ask to upload server replays but it's good practice)
+        const sessionId = result.match_overview?.session_id || `server_${matchId}`;
+        const storageKey = `replays/${sessionId}.replay`;
+        await r2.upload(storageKey, buffer, 'application/octet-stream');
+        const storageUrl = `https://assets.pathgen.dev/${storageKey}`;
+
+        const finalResult = await mirrorObjectUrls(result);
+
+        res.json({
+            credits_used: 25,
+            credits_remaining: req.user.credits || 0,
+            parse_time_ms: parseTime,
+            download_time_ms: downloadTime,
+            source: 'server_replay',
+            storage_url: storageUrl,
+            manifest: {
+                matchId: manifest.matchId,
+                timestamp: manifest.timestamp,
+                lengthInMs: manifest.lengthInMs,
+                totalSizeBytes: manifest.totalSizeBytes
+            },
+            data: finalResult
+        });
+
+    } catch (err) {
+        if (err.status === 404 || err.message === 'REPLAY_NOT_FOUND') {
+            return res.status(404).json({ error: true, code: 'REPLAY_NOT_FOUND', message: 'Replay not found' });
+        }
+        if (err.message === 'MATCH_STILL_LIVE') {
+            return res.status(400).json({ error: true, code: 'MATCH_STILL_LIVE', message: 'This match is still in progress' });
+        }
+        res.status(500).json({ error: true, code: 'DOWNLOAD_FAILED', message: err.message });
     }
 });
 

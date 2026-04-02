@@ -5,7 +5,11 @@ import { getAESKey } from '../lib/aes.mjs';
 const router = express.Router();
 
 router.get('/', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({ 
+        status: 'ok', 
+        developer: 'Wrench Develops (https://x.com/WrenchDevelops)',
+        timestamp: new Date().toISOString() 
+    });
 });
 
 router.get('/detailed', async (req, res) => {
@@ -24,6 +28,7 @@ router.get('/detailed', async (req, res) => {
 
     res.json({
         status: 'ok',
+        developer: 'Wrench Develops (https://x.com/WrenchDevelops)',
         uptime_seconds: Math.floor(process.uptime()),
         memory_mb: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
         components: {
@@ -33,9 +38,14 @@ router.get('/detailed', async (req, res) => {
             fortnite_api: { status: 'ok', last_check: new Date().toISOString() },
             aes_key: {
                 status: 'ok',
-                version: keyInfo.version,
-                source: keyInfo.source,
-                key: keyInfo.key.substring(0, 10) + '...'
+                build: keyInfo?.build || 'unknown',
+                updated: keyInfo?.updated || 'unknown',
+                key: keyInfo?.mainKey ? (keyInfo.mainKey.substring(0, 10) + '...') : 'N/A'
+            },
+            replay_downloader: {
+                status: 'ok',
+                note: 'Epic CDN download available',
+                requires: 'epic_oauth_connected'
             }
         }
     });

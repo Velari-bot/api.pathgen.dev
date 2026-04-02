@@ -58,6 +58,10 @@ app.get('/', (req, res) => {
     res.send("PathGen API Server (v1.2.6). Developed by Wrench Develops (https://x.com/WrenchDevelops). Visit https://platform.pathgen.dev for documentation.");
 });
 
+app.get('/favicon.ico', (req, res) => {
+    res.sendFile(path.resolve('Pathgen Platform.png'));
+});
+
 app.get('/debug', (req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString() });
 });

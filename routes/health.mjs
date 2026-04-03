@@ -5,6 +5,19 @@ import { getAESKey } from '../lib/aes.mjs';
 
 const router = express.Router();
 
+router.use((req, res, next) => {
+    const origin = req.get('Origin');
+    const allowedOrigins = ['https://platform.pathgen.dev', 'http://localhost:3000'];
+    if (allowedOrigins.includes(origin)) {
+        res.set('Access-Control-Allow-Origin', origin);
+    } else {
+        res.set('Access-Control-Allow-Origin', 'https://platform.pathgen.dev');
+    }
+    res.set('Access-Control-Allow-Methods', 'GET');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    next();
+});
+
 router.get('/', (req, res) => {
     res.json({ 
         status: 'ok', 

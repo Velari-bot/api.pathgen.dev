@@ -1,4 +1,7 @@
 import 'dotenv/config';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
@@ -54,31 +57,13 @@ app.use('/health', healthRoutes); // System Status & Self-Healing
 app.use('/metrics', metricsRoutes);
 
 app.get('/', (req, res) => {
-    res.send(`<!DOCTYPE html>
-<html>
-<head>
-    <title>PathGen API Server</title>
-    <link rel="icon" type="image/png" href="/favicon.png">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #e1e1e1; background: #0f172a; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
-        .container { padding: 2rem; border-radius: 12px; background: #1e293b; border: 1px solid #334155; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
-        a { color: #38bdf8; text-decoration: none; font-weight: 500; }
-        a:hover { text-decoration: underline; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <img src="/favicon.png" width="64" height="64" alt="Pathgen Logo" style="margin-bottom: 1rem;">
-        <h1>PathGen API Server <small style="font-size: 0.5em; opacity: 0.7;">v1.2.6</small></h1>
-        <p>Developed by <a href="https://x.com/WrenchDevelops" target="_blank">Wrench Develops</a></p>
-        <p style="opacity: 0.8;">This is a high-performance backend. Visit <a href="https://platform.pathgen.dev">platform.pathgen.dev</a> for documentation.</p>
-    </div>
-</body>
-</html>`);
+    res.type('text/plain');
+    res.send('PathGen API Server v1.2.6\n\nThis is not for regular use. Head to https://platform.pathgen.dev instead.');
 });
 
 app.get(['/favicon.ico', '/favicon.png'], (req, res) => {
-    res.sendFile(path.resolve('Pathgen Platform.png'));
+    res.type('image/png');
+    res.sendFile(path.join(__dirname, 'Pathgen Platform.png'));
 });
 
 app.get('/debug', (req, res) => {

@@ -29,6 +29,10 @@ import specRoutes from './routes/spec.mjs';
 import webhookRoutes from './routes/webhooks.mjs';
 import healthRoutes from './routes/health.mjs';
 
+// Automations
+import { startDailyDigest } from './lib/daily_digest.mjs';
+import { startWeeklyCoaching } from './lib/weekly_coaching.mjs';
+
 const app = express();
 app.set('trust proxy', true); 
 const port = process.env.PORT || 3000;
@@ -135,7 +139,10 @@ app.use((err, req, res, next) => {
 });
 
 // Pre-warm AES key cache
+// Start Automations
 await initAESKey();
+startDailyDigest();
+startWeeklyCoaching();
 
 app.listen(port, () => {
     console.log(`PathGen API Server running on port ${port}`);

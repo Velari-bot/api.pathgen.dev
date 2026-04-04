@@ -6,11 +6,13 @@ import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
 import { getPlayerStats } from '../fortnite_api.mjs';
 import { r2 } from '../lib/r2.mjs';
 import { db } from '../lib/db.mjs';
+import { adminDb } from '../lib/firebase/admin.mjs';
 import { getAccessTokenForUser } from '../lib/epic_token_manager.mjs';
 import { getRankedData, getCrownWins } from '../lib/epic_data.mjs';
 import { mirrorObjectUrls } from '../lib/image_mirror.mjs';
 import { downloadFullReplay, getReplayManifest } from '../lib/replay_downloader.mjs';
-
+import { recordParse } from '../lib/monitor.mjs';
+import { sendLowCreditAlert, sendParseReceiptEmail } from '../lib/email.mjs';
 
 const router = express.Router();
 
@@ -78,9 +80,33 @@ router.post('/parse', validateFirestoreKey(20), upload.single('replay'), async (
         // Final Mirroring for R2 storage
         const finalResult = await mirrorObjectUrls(result);
         
-        return res.json(wrapResponse(req, finalResult, 20, storageUrl));
+        const response = wrapResponse(req, finalResult, 20, storageUrl);
+        recordParse(true);
+
+        // --- AUTOMATION TRIGGERS (Fire & Forget) ---
+        (async () => {
+            const userSnap = await adminDb.collection('users').doc(req.user.email).get();
+            const userData = userSnap.data();
+            const creditsRemaining = req.user.credits || 0;
+
+            if (userData?.email_alerts !== false) {
+                if (creditsRemaining < 500) {
+                    sendLowCreditAlert(req.user.email, creditsRemaining).catch(console.error);
+                }
+                sendParseReceiptEmail(req.user.email, {
+                    result: finalResult.match_overview?.result,
+                    placement: finalResult.match_overview?.placement,
+                    kills: finalResult.combat_summary?.eliminations?.players,
+                    damage: finalResult.combat_summary?.damage?.to_players,
+                    creditsRemaining
+                }).catch(console.error);
+            }
+        })();
+
+        return res.json(response);
 
     } catch (err) {
+        recordParse(false);
         res.status(500).json({ error: true, code: 'PARSE_FAILED', message: err.message });
     }
 });

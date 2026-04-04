@@ -179,3 +179,45 @@ Structure: {
 }
 Moments: ${JSON.stringify(moments)}`);
 }
+
+/**
+ * Weekly Review Engine
+ */
+export async function generateWeeklyCoach(matches) {
+  const summary = {
+    match_count: matches.length,
+    avg_kills: avg(matches.map(m => m.kills || 0)),
+    avg_damage: avg(matches.map(m => m.damage_to_players || 0)),
+    avg_accuracy: avg(matches.map(m => parseFloat(m.accuracy || '0'))),
+    avg_placement: avg(matches.map(m => m.placement || 100)),
+    win_count: matches.filter(m => m.result === 'Victory Royale').length,
+    total_builds: matches.reduce((s, m) => s + (m.builds_placed || 0), 0),
+    total_kills: matches.reduce((s, m) => s + (m.kills || 0), 0)
+  };
+
+  return callGemini(`
+You are a professional Fortnite coach reviewing a player's week. 
+Summarize their performance based on these stats for ${summary.match_count} matches:
+
+  Average kills:     ${summary.avg_kills.toFixed(1)}
+  Average damage:    ${summary.avg_damage.toFixed(0)}
+  Average accuracy:  ${summary.avg_accuracy.toFixed(1)}%
+  Average placement: #${summary.avg_placement.toFixed(0)}
+  Wins this week:    ${summary.win_count}
+  Total kills:       ${summary.total_kills}
+  Total builds:      ${summary.total_builds}
+
+Return valid JSON only in this structure:
+{
+  "headline": "one sentence summary of their week",
+  "trend": "improving"|"declining"|"consistent",
+  "top_strength": "their best area this week",
+  "focus_area": "one thing to work on next week",
+  "weekly_tip": "one specific actionable tip"
+}
+  `);
+}
+
+function avg(arr) {
+  return arr.length === 0 ? 0 : arr.reduce((a, b) => a + b, 0) / arr.length;
+}

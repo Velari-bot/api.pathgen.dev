@@ -150,7 +150,12 @@ export const validateFirestoreKey = (creditCost = 1, options = { requireBeta: fa
 
                 transaction.update(keyRef, { lastUsed: new Date().toISOString() });
 
-                return { email, orgId, appId };
+                // Fetch new balance to pass down
+                const billingRef = adminDb.collection('billing').doc(email);
+                const updatedBillDoc = await transaction.get(billingRef);
+                const finalBalance = updatedBillDoc.exists ? (updatedBillDoc.data().balance || 0) : 0;
+
+                return { email, orgId, appId, credits: Math.round(finalBalance * 100) };
             });
 
             // Set user object for downstream handlers

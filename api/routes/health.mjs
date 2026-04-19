@@ -19,7 +19,7 @@ router.use((req, res, next) => {
     next();
 });
 
-router.get('/', validateFirestoreKey(0), (req, res) => {
+router.get('/', (req, res) => {
     res.json({ 
         status: 'ok', 
         timestamp: new Date().toISOString() 

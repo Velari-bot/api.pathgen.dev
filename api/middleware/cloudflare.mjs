@@ -22,11 +22,10 @@ export const cloudflareOnly = (req, res, next) => {
     }
 
     // Capture the IP of the machine directly connecting to our Node.js server
-    // (This should be a Cloudflare IP in production)
     const connectingIp = req.socket.remoteAddress || req.connection.remoteAddress;
 
-    // Check if the connecting socket is a known Cloudflare IP
-    if (ipRangeCheck(connectingIp, CLOUDFLARE_IPS)) {
+    // Check if the connecting socket is a known Cloudflare IP or localhost
+    if (ipRangeCheck(connectingIp, CLOUDFLARE_IPS) || connectingIp === '::1' || connectingIp === '127.0.0.1') {
         next();
     } else {
         // Fallback: Some hosting environments might translate IPs, check CF Headers

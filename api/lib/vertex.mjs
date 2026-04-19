@@ -12,7 +12,7 @@ dotenv.config();
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY || "");
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+  model: "gemini-2.5-flash",
   generationConfig: {
     maxOutputTokens: 2048,
     temperature: 0.4,
@@ -35,10 +35,17 @@ async function callGemini(prompt) {
     const response = await result.response;
     const text = response.text();
     
+    if (!text) {
+        console.error('[Gemini API] Empty response body');
+        return null;
+    }
+
     try {
-        return JSON.parse(text);
+        const cleaned = text.trim();
+        return JSON.parse(cleaned);
     } catch (e) {
-        console.error('[Gemini JSON Error] Raw Text:', text);
+        console.error('[Gemini JSON Error] Failed to parse response:', e.message);
+        console.error('[Gemini Raw Output]:', text.slice(0, 500));
         return null;
     }
   } catch (err) {
@@ -56,21 +63,25 @@ function summarizeForGemini(d) {
       result: d.match_overview?.result,
       placement: d.match_overview?.placement,
       total_players: d.match_overview?.lobby?.players,
+      human_players: d.match_overview?.lobby?.human_players,
+      difficulty: d.match_overview?.match_difficulty?.difficulty,
       time_alive: d.match_overview?.performance_metrics?.time_alive,
-      kills: d.combat_summary?.eliminations?.players,
-      ai_kills: d.combat_summary?.eliminations?.ai,
+      kills: d.combat_summary?.eliminations?.total,
+      player_kills: d.combat_summary?.eliminations?.players,
       damage_dealt: d.combat_summary?.damage?.to_players,
       damage_taken: d.combat_summary?.damage?.from_players,
       accuracy: d.combat_summary?.accuracy_general?.overall_percentage,
-      headshot_rate: d.combat_summary?.accuracy_general?.headshot_rate,
+      headshot_rate: d.combat_summary?.metrics?.headshot_rate,
+      damage_ratio: d.combat_summary?.metrics?.damage_ratio,
       builds_placed: d.building_and_utility?.mechanics?.builds_placed,
       builds_edited: d.building_and_utility?.mechanics?.builds_edited,
+      edit_rate: d.building_and_utility?.metrics?.edit_rate,
       drop_score: d.match_overview?.performance_metrics?.drop_score,
-      rotation_score: d.rotation_score ?? null,
+      actual_drop_time: d.match_overview?.performance_metrics?.actual_drop_time,
       weapons: (d.weapon_deep_dive || []).map(w => ({
         name: w.weapon,
-        kills: w.elims,
-        damage: w.player_damage,
+        damage: w.damage_to_players,
+        hits: w.hits_to_players,
         accuracy: w.accuracy
       }))
     };
@@ -82,18 +93,23 @@ function summarizeForGemini(d) {
 
 export async function analyzeMatch(matchData) {
   const summary = summarizeForGemini(matchData);
-  return callGemini(`
-You are an expert Fortnite coach. Analyze this match data and return JSON.
-Structure: { 
-  "summary": string, 
-  "performance_tier": "elite"|"strong"|"average"|"needs_work",
-  "score": number(0-100),
-  "strengths": [{"title": string, "detail": string}],
-  "weaknesses": [{"title": string, "detail": string}],
-  "action_items": string[],
-  "focus_area": string
-}
-Match: ${JSON.stringify(summary)}`);
+  const prompt = `
+    SYSTEM: You are a professional Fortnite FNCS coach. 
+    Analyze the provided match JSON and return a surgical, high-value coaching report in JSON format.
+    
+    Structure: { 
+      "summary": "2-3 sentences explaining exactly how they died and why", 
+      "performance_tier": "elite"|"strong"|"average"|"needs_work",
+      "score": number(0-100),
+      "strengths": [{"title": string, "detail": string}],
+      "weaknesses": [{"title": string, "detail": string}],
+      "action_items": ["3 specific actionable tips based on their stats"],
+      "focus_area": "one word theme (e.g. Aim, Rotation, Building)"
+    }
+
+    Match Data: ${JSON.stringify(summary)}
+  `;
+  return callGemini(prompt);
 }
 
 export async function coachMatch(matchData) {

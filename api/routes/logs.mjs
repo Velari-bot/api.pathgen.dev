@@ -1,12 +1,13 @@
 import express from 'express';
 import { db } from '../lib/db.mjs';
+import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
 
 const router = express.Router();
 
 // Mock middleware for admin token (already in server.mjs)
 // router.use(isAdmin);
 
-router.get('/requests', async (req, res) => {
+router.get('/requests', validateFirestoreKey(0, { requireAdmin: true }), async (req, res) => {
     const { page = 1, limit = 50, from, to, endpoint, status, key_id } = req.query;
     const offset = (page - 1) * limit;
 
@@ -35,7 +36,7 @@ router.get('/requests', async (req, res) => {
     }
 });
 
-router.get('/errors', async (req, res) => {
+router.get('/errors', validateFirestoreKey(0, { requireAdmin: true }), async (req, res) => {
     res.json({
         errors: [
             {
@@ -52,7 +53,7 @@ router.get('/errors', async (req, res) => {
     });
 });
 
-router.get('/parses', async (req, res) => {
+router.get('/parses', validateFirestoreKey(0, { requireAdmin: true }), async (req, res) => {
     res.json({
         parses: [
             {
@@ -78,7 +79,7 @@ router.get('/parses', async (req, res) => {
     });
 });
 
-router.get('/credits', async (req, res) => {
+router.get('/credits', validateFirestoreKey(0, { requireAdmin: true }), async (req, res) => {
     res.json({
         transactions: [
             {
@@ -96,7 +97,7 @@ router.get('/credits', async (req, res) => {
 
 // Real-time SSE Stream
 let clients = [];
-router.get('/live', (req, res) => {
+router.get('/live', validateFirestoreKey(0, { requireAdmin: true }), (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');

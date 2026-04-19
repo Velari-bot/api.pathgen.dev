@@ -7,6 +7,25 @@ import { getPlayerStats, fortniteLib } from '../fortnite_api.mjs';
 
 const router = express.Router();
 
+router.get('/me', validateFirestoreKey(0), async (req, res) => {
+    try {
+        const userRef = adminDb.collection('users').doc(req.user.email);
+        const userDoc = await userRef.get();
+        if (!userDoc.exists) return res.status(404).json({ error: 'User profile not found' });
+        
+        const billingRef = adminDb.collection('billing').doc(req.user.email);
+        const billDoc = await billingRef.get();
+        
+        res.json({ 
+            ...userDoc.data(),
+            tier: billDoc.exists ? billDoc.data().tier : 'FREE',
+            balance: billDoc.exists ? billDoc.data().balance : 0
+        });
+    } catch(err) {
+        res.status(500).json({ error: 'Could not fetch profile' });
+    }
+});
+
 router.get('/balance', validateFirestoreKey(0), async (req, res) => {
     try {
         const billingRef = adminDb.collection('billing').doc(req.user.email);
@@ -112,7 +131,7 @@ router.get('/usage', validateFirestoreKey(0), async (req, res) => {
 });
 
 
-router.get('/usage/daily', async (req, res) => {
+router.get('/usage/daily', validateFirestoreKey(0), async (req, res) => {
     // Placeholder for real time-series data from DB
     res.json({
         "2026-03-23": 1502,

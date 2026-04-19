@@ -22,13 +22,27 @@ router.get('/history', validateFirestoreKey(0), async (req, res) => {
 });
 
 
-router.post('/checkout', async (req, res) => {
+router.post('/topup', validateFirestoreKey(0), async (req, res) => {
+    // Alias for /checkout to match production spec
     const { pack } = req.body;
     const priceId = PACKS[pack];
     if (!priceId) return res.status(400).json({ error: 'Invalid pack' });
 
     try {
-        const session = await stripeLib.createCheckoutSession(req.user.id, priceId);
+        const session = await stripeLib.createCheckoutSession(req.user.email, priceId);
+        res.json({ url: session.url });
+    } catch (err) {
+        res.status(500).json({ error: 'Stripe session creation failed' });
+    }
+});
+
+router.post('/checkout', validateFirestoreKey(0), async (req, res) => {
+    const { pack } = req.body;
+    const priceId = PACKS[pack];
+    if (!priceId) return res.status(400).json({ error: 'Invalid pack' });
+
+    try {
+        const session = await stripeLib.createCheckoutSession(req.user.email, priceId);
         res.json({ url: session.url });
     } catch (err) {
         res.status(500).json({ error: 'Stripe session creation failed' });

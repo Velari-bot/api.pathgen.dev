@@ -2,6 +2,7 @@ import express from 'express';
 import { db } from '../lib/db.mjs';
 import { adminDb } from '../lib/firebase/admin.mjs';
 import { getAESKey } from '../lib/aes.mjs';
+import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
 
 const router = express.Router();
 
@@ -18,14 +19,14 @@ router.use((req, res, next) => {
     next();
 });
 
-router.get('/', (req, res) => {
+router.get('/', validateFirestoreKey(0), (req, res) => {
     res.json({ 
         status: 'ok', 
         timestamp: new Date().toISOString() 
     });
 });
 
-router.get('/detailed', async (req, res) => {
+router.get('/detailed', validateFirestoreKey(0, { requireAdmin: true }), async (req, res) => {
     let firestoreStatus = 'ok';
     let firestoreLatency = 0;
     try {
@@ -61,7 +62,7 @@ router.get('/detailed', async (req, res) => {
     });
 });
 
-router.get('/db', async (req, res) => {
+router.get('/db', validateFirestoreKey(0, { requireAdmin: true }), async (req, res) => {
     try {
         const start = Date.now();
         await adminDb.collection('_health').doc('ping').get();
@@ -75,7 +76,7 @@ router.get('/db', async (req, res) => {
     }
 });
 
-router.get('/parser', (req, res) => {
+router.get('/parser', validateFirestoreKey(0, { requireAdmin: true }), (req, res) => {
     // Parser-specific check. Confirms ooz-wasm loaded, AES decryption working, last successful parse timestamp.
     res.json({
         status: 'ok',

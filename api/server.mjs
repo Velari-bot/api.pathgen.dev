@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import path from 'path';
 import { fileURLToPath } from 'url';
+console.log(`[INIT] Starting PathGen API... 环境: ${process.env.NODE_ENV}, SkipAuth: ${process.env.SKIP_AUTH}`);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import express from 'express';
 import cors from 'cors';
@@ -46,8 +47,17 @@ if (!process.env.GOOGLE_AI_KEY) console.warn(`[WARNING] Missing GOOGLE_AI_KEY. A
 if (!process.env.DATABASE_URL) console.warn(`[WARNING] Missing DATABASE_URL. Legacy PostgreSQL Auth will be unavailable.`);
 
 // Global Security & Logging
-app.use(helmet()); 
-app.use(cors());
+if (process.env.NODE_ENV !== 'development') {
+    app.use(helmet()); 
+} else {
+    console.log('[Security] Helmet disabled for local development');
+}
+
+app.use(cors({
+    origin: [/pathgen\.dev$/],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 app.use(express.json());
 app.use(loggerMiddleware); // Custom logger
 app.use(morgan('dev')); // Console logger
@@ -60,7 +70,7 @@ app.use(rateLimitMiddleware(100, 60)); // Global "burst" protection: 100 req/min
 app.use('/health', healthRoutes); // System Status & Self-Healing
 app.use('/metrics', metricsRoutes);
 
-app.get('/', (req, res) => {
+app.get('/', validateFirestoreKey(0), (req, res) => {
     res.type('text/plain');
     res.send('PathGen API Server v1.2.6\n\nThis is not for regular use. Head to https://platform.pathgen.dev instead.');
 });
@@ -70,7 +80,7 @@ app.get(['/favicon.ico', '/favicon.png'], (req, res) => {
     res.sendFile(path.join(__dirname, 'Pathgen Platform.png'));
 });
 
-app.get('/debug', (req, res) => {
+app.get('/debug', validateFirestoreKey(0, { requireAdmin: true }), (req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString() });
 });
 

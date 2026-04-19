@@ -25,7 +25,7 @@ router.post('/subscribe', validateFirestoreKey(5, { requireBeta: true }), async 
     }
 });
 
-router.get('/events', async (req, res) => {
+router.get('/events', validateFirestoreKey(1), async (req, res) => {
     // List available events to subscribe to
     res.json({
         available_events: ['shop.rotate', 'aes.rotate', 'news.update', 'replay.complete']

@@ -33,7 +33,7 @@ const processAIRequest = async (req, res, cost, aiFunction) => {
         res.json({
             status: 200,
             credits_used: cost,
-            credits_remaining: (req.user?.credits || 0) - cost,
+            credits_remaining: (req.user?.credits || 0),
             data: stats
         });
     } catch (err) {

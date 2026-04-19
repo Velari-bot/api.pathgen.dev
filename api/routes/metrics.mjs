@@ -1,9 +1,10 @@
 import express from 'express';
 import { metrics } from '../lib/metrics.mjs';
+import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+router.get('/', validateFirestoreKey(0, { requireAdmin: true }), async (req, res) => {
     try {
         // Support JSON if requested via query or Accept header (for API Explorer)
         if (req.query.format === 'json' || req.headers.accept?.includes('application/json')) {

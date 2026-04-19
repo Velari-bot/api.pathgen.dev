@@ -57,10 +57,10 @@ export async function deductCredits(email, creditCost, action, target = '/') {
     }
 }
 
-export const validateFirestoreKey = (creditCost = 1, options = { requireBeta: false }) => {
+export const validateFirestoreKey = (creditCost = 1, options = { requireBeta: false, requireAdmin: false }) => {
     return async (req, res, next) => {
+
         let apiKey = req.query.key;
-        
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
             apiKey = authHeader.split(' ')[1];
@@ -77,43 +77,44 @@ export const validateFirestoreKey = (creditCost = 1, options = { requireBeta: fa
         const usdCost = creditCost / 100;
         const startTime = Date.now();
 
-            try {
-                const result = await adminDb.runTransaction(async (transaction) => {
-                    // 1. Identity Lookup
-                    // We now hash the incoming key before document lookup to match our secure storage
-                    const hashedKey = crypto.createHash('sha256').update(apiKey).digest('hex');
-                    let keyRef = adminDb.collection('api_keys').doc(hashedKey);
-                    let keyDoc = await transaction.get(keyRef);
-                    
-                    // Fallback for Legacy (non-hashed) keys to prevent breaking existing users
-                    if (!keyDoc.exists) {
-                        const legacyRef = adminDb.collection('api_keys').doc(apiKey);
-                        const legacyDoc = await transaction.get(legacyRef);
-                        if (legacyDoc.exists) {
-                            keyRef = legacyRef;
-                            keyDoc = legacyDoc;
-                            console.warn(`SECURITY WARNING: Legacy raw API key used by ${legacyDoc.data().email}. Please rotate.`);
-                        }
-                    }
+        try {
+            if (!adminDb) throw new Error("Firestore Admin not initialized");
 
-                    if (!keyDoc.exists) {
-                        throw new Error("Invalid Key");
+            const result = await adminDb.runTransaction(async (transaction) => {
+                const hashedKey = crypto.createHash('sha256').update(apiKey).digest('hex');
+                let keyRef = adminDb.collection('api_keys').doc(hashedKey);
+                let keyDoc = await transaction.get(keyRef);
+                
+                if (!keyDoc.exists) {
+                    const legacyRef = adminDb.collection('api_keys').doc(apiKey);
+                    const legacyDoc = await transaction.get(legacyRef);
+                    if (legacyDoc.exists) {
+                        keyRef = legacyRef;
+                        keyDoc = legacyDoc;
                     }
+                }
+
+                if (!keyDoc.exists) {
+                    throw new Error("Invalid Key");
+                }
 
                 const keyData = keyDoc.data();
                 const { email, orgId, appId, betaAccess, tier } = keyData;
 
-                // 2. Beta & Tier Access Check
-                if (options.requireBeta && tier !== 'PRO' && !betaAccess) {
+                if (options.requireAdmin && tier !== 'ADMIN') {
+                    throw new Error("Admin Required");
+                }
+
+                if (options.requireBeta && tier !== 'PRO' && tier !== 'ADMIN' && !betaAccess) {
                     throw new Error("Upgrade Required");
                 }
 
-                // 3. Conditional Credit Deduction (only if cost > 0)
                 let actualCreditCost = creditCost;
                 let actualUsdCost = usdCost;
 
-                if (tier === 'PRO' && actualCreditCost > 0) {
-                    actualCreditCost = Math.ceil(actualCreditCost * 0.75); // 25% Discount for PRO
+                if (tier === 'PRO' && actualCreditCost > 2) {
+                    // 25% discount for PRO tier on high-cost endpoints
+                    actualCreditCost = Math.ceil(actualCreditCost * 0.75); 
                     actualUsdCost = actualCreditCost / 100;
                 }
 
@@ -130,7 +131,6 @@ export const validateFirestoreKey = (creditCost = 1, options = { requireBeta: fa
                     transaction.update(billingRef, { balance: newBalance });
                 }
 
-                // 4. Log Activity for Dashboard
                 const latency = Date.now() - startTime;
                 const actRef = adminDb.collection('activities').doc();
                 
@@ -150,51 +150,29 @@ export const validateFirestoreKey = (creditCost = 1, options = { requireBeta: fa
 
                 transaction.update(keyRef, { lastUsed: new Date().toISOString() });
 
-                // Fetch new balance to pass down
                 const billingRef = adminDb.collection('billing').doc(email);
                 const updatedBillDoc = await transaction.get(billingRef);
                 const finalBalance = updatedBillDoc.exists ? (updatedBillDoc.data().balance || 0) : 0;
 
-                return { email, orgId, appId, credits: Math.round(finalBalance * 100) };
+                return { email, orgId, appId, credits: Math.round(finalBalance * 100), tier: tier || 'FREE' };
             });
 
-            // Set user object for downstream handlers
             req.user = result;
             next();
         } catch (err) {
             console.error('Firestore Auth Transaction Failed:', err.message);
             
             if (err.message === "Invalid Key") {
-                return res.status(401).json({
-                    error: true,
-                    code: 'INVALID_KEY',
-                    message: 'Invalid API key'
-                });
+                return res.status(401).json({ error: true, code: 'INVALID_KEY', message: 'Invalid API key' });
             }
-
+            if (err.message === "Admin Required") {
+                return res.status(403).json({ error: true, code: 'FORBIDDEN', message: 'Admin access required' });
+            }
             if (err.message === "Upgrade Required") {
-                return res.status(403).json({
-                    error: true,
-                    code: 'UPGRADE_REQUIRED',
-                    tier: 'FREE',
-                    message: 'This feature (AI, Enhanced Replay, Webhooks) requires a PathGen PRO subscription. Upgrade at https://pathgen.dev/pricing'
-                });
+                return res.status(403).json({ error: true, code: 'UPGRADE_REQUIRED', message: 'Upgrade required' });
             }
-
-            if (err.message === "Beta Access Required") {
-                return res.status(403).json({
-                    error: true,
-                    code: 'BETA_ACCESS_REQUIRED',
-                    message: 'This endpoint is currently in Closed Beta. Please request access at https://pathgen.dev/beta'
-                });
-            }
-
             if (err.message === "Insufficient Balance") {
-                return res.status(402).json({
-                    error: true,
-                    code: 'INSUFFICIENT_CREDITS',
-                    message: 'Please recharge your credits to continue.'
-                });
+                return res.status(402).json({ error: true, code: 'INSUFFICIENT_CREDITS', message: 'Insufficient balance' });
             }
 
             return res.status(500).json({

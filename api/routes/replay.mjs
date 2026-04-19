@@ -13,6 +13,8 @@ import { mirrorObjectUrls } from '../lib/image_mirror.mjs';
 import { downloadFullReplay, getReplayManifest } from '../lib/replay_downloader.mjs';
 import { recordParse } from '../lib/monitor.mjs';
 import { sendLowCreditAlert, sendParseReceiptEmail } from '../lib/email.mjs';
+import { analyzeMatch, coachMatch } from '../lib/vertex.mjs';
+import { saveMatchToFirestore } from '../lib/firebase/matches.mjs';
 
 const router = express.Router();
 
@@ -30,18 +32,28 @@ const wrapResponse = (req, payload, cost, storageUrl) => {
 };
 
 const processReplayAndUpload = async (req) => {
-    if (!req.file) throw new Error('No replay file provided');
-    const result = await parseReplay(req.file.buffer);
+    // Support both 'replay' and 'file' field names for high compatibility
+    const file = req.file || (req.files ? (req.files.replay?.[0] || req.files.file?.[0]) : null);
+    if (!file) throw new Error('No replay file provided (use field "replay" or "file")');
+    
+    const result = await parseReplay(file.buffer);
     const sessionId = result.match_overview?.session_id || `replay_${Date.now()}`;
     const storageKey = `replays/${sessionId}.replay`;
-    await r2.upload(storageKey, req.file.buffer, 'application/octet-stream');
-    const storageUrl = `https://assets.pathgen.dev/${storageKey}`;
+    
+    let storageUrl = null;
+    if (process.env.NODE_ENV !== 'development' && process.env.SKIP_R2_UPLOAD !== 'true') {
+        await r2.upload(storageKey, file.buffer, 'application/octet-stream');
+        storageUrl = `https://assets.pathgen.dev/${storageKey}`;
+    } else {
+        console.log('[R2 Skip] Skipping upload for local development');
+    }
+    
     return { result, storageUrl };
 };
 
 
 
-router.post('/parse', validateFirestoreKey(20), upload.single('replay'), async (req, res) => {
+router.post('/parse', validateFirestoreKey(20), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
 
     try {
         const start = Date.now();
@@ -76,6 +88,10 @@ router.post('/parse', validateFirestoreKey(20), upload.single('replay'), async (
                 console.warn('[Phase2] Data enrichment failed:', err.message);
             }
         }
+
+        // --- PHASE 3: METADATA ENRICHMENT ---
+        result.parser_meta.parsed_at = new Date().toISOString();
+        result.ai_coach = null; // AI features moved to dedicated /v1/ai endpoints for cost management
         
         // Final Mirroring for R2 storage
         const finalResult = await mirrorObjectUrls(result);
@@ -83,25 +99,30 @@ router.post('/parse', validateFirestoreKey(20), upload.single('replay'), async (
         const response = wrapResponse(req, finalResult, 20, storageUrl);
         recordParse(true);
 
-        // --- AUTOMATION TRIGGERS (Fire & Forget) ---
-        (async () => {
-            const userSnap = await adminDb.collection('users').doc(req.user.email).get();
-            const userData = userSnap.data();
-            const creditsRemaining = req.user.credits || 0;
+        // --- PHASE 4: FIRESTORE PERSISTENCE ---
+        await saveMatchToFirestore(finalResult, req.user?.email || "guest");
 
-            if (userData?.email_alerts !== false) {
-                if (creditsRemaining < 500) {
-                    sendLowCreditAlert(req.user.email, creditsRemaining).catch(console.error);
+        // --- AUTOMATION TRIGGERS (Fire & Forget) ---
+        if (adminDb) {
+            (async () => {
+                const userSnap = await adminDb.collection('users').doc(req.user.email).get();
+                const userData = userSnap.data();
+                const creditsRemaining = req.user.credits || 0;
+
+                if (userData?.email_alerts !== false) {
+                    if (creditsRemaining < 500) {
+                        sendLowCreditAlert(req.user.email, creditsRemaining).catch(console.error);
+                    }
+                    sendParseReceiptEmail(req.user.email, {
+                        result: finalResult.match_overview?.result,
+                        placement: finalResult.match_overview?.placement,
+                        kills: finalResult.combat_summary?.eliminations?.players,
+                        damage: finalResult.combat_summary?.damage?.to_players,
+                        creditsRemaining
+                    }).catch(console.error);
                 }
-                sendParseReceiptEmail(req.user.email, {
-                    result: finalResult.match_overview?.result,
-                    placement: finalResult.match_overview?.placement,
-                    kills: finalResult.combat_summary?.eliminations?.players,
-                    damage: finalResult.combat_summary?.damage?.to_players,
-                    creditsRemaining
-                }).catch(console.error);
-            }
-        })();
+            })();
+        }
 
         return res.json(response);
 
@@ -111,7 +132,7 @@ router.post('/parse', validateFirestoreKey(20), upload.single('replay'), async (
     }
 });
 
-router.post('/stats', validateFirestoreKey(5), upload.single('replay'), async (req, res) => {
+router.post('/stats', validateFirestoreKey(5), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
     try {
         const start = Date.now();
         const { result, storageUrl } = await processReplayAndUpload(req);
@@ -134,7 +155,7 @@ router.post('/stats', validateFirestoreKey(5), upload.single('replay'), async (r
 });
 
 
-router.post('/scoreboard', validateFirestoreKey(8), upload.single('replay'), async (req, res) => {
+router.post('/scoreboard', validateFirestoreKey(8), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
 
     try {
         const start = Date.now();
@@ -150,7 +171,7 @@ router.post('/scoreboard', validateFirestoreKey(8), upload.single('replay'), asy
     }
 });
 
-router.post('/movement', validateFirestoreKey(8), upload.single('replay'), async (req, res) => {
+router.post('/movement', validateFirestoreKey(8), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
 
     try {
         const start = Date.now();
@@ -164,7 +185,7 @@ router.post('/movement', validateFirestoreKey(8), upload.single('replay'), async
     }
 });
 
-router.post('/weapons', validateFirestoreKey(8), upload.single('replay'), async (req, res) => {
+router.post('/weapons', validateFirestoreKey(8), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
 
     try {
         const start = Date.now();
@@ -179,7 +200,7 @@ router.post('/weapons', validateFirestoreKey(8), upload.single('replay'), async 
     }
 });
 
-router.post('/events', validateFirestoreKey(10), upload.single('replay'), async (req, res) => {
+router.post('/events', validateFirestoreKey(10), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
 
     try {
         const start = Date.now();
@@ -194,7 +215,7 @@ router.post('/events', validateFirestoreKey(10), upload.single('replay'), async 
 });
 
 // Drop Analysis (15 Credits)
-router.post('/drop-analysis', validateFirestoreKey(15), upload.single('replay'), async (req, res) => {
+router.post('/drop-analysis', validateFirestoreKey(15), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
 
     try {
         const start = Date.now();
@@ -212,8 +233,8 @@ router.post('/drop-analysis', validateFirestoreKey(15), upload.single('replay'),
     }
 });
 
-// Rotation Score (25 Credits)
-router.post('/rotation-score', validateFirestoreKey(25), upload.single('replay'), async (req, res) => {
+// Rotation Score (25 Credits) - PRO
+router.post('/rotation-score', validateFirestoreKey(25, { requireBeta: true }), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
     try {
         const start = Date.now();
         const { result, storageUrl } = await processReplayAndUpload(req);
@@ -309,7 +330,7 @@ router.post('/rotation-score', validateFirestoreKey(25), upload.single('replay')
 });
 
 // Opponents (30 Credits)
-router.post('/opponents', validateFirestoreKey(30), upload.single('replay'), async (req, res) => {
+router.post('/opponents', validateFirestoreKey(30), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
 
     try {
         const start = Date.now();
@@ -415,10 +436,10 @@ router.post('/match-info', validateFirestoreKey(5), async (req, res) => {
 
 /**
  * POST /v1/replay/download-and-parse
- * Cost: 25 credits
+ * Cost: 25 credits - PRO
  * Full automation — downloads from Epic and parses
  */
-router.post('/download-and-parse', validateFirestoreKey(25), async (req, res) => {
+router.post('/download-and-parse', validateFirestoreKey(25, { requireBeta: true }), async (req, res) => {
     const { matchId } = req.body;
 
     if (!matchId) {

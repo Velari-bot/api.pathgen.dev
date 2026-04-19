@@ -1,0 +1,12 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "node api/server.mjs"
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicy = "always"
+
+[variables]
+NODE_ENV = "production"
+PORT = "3000"

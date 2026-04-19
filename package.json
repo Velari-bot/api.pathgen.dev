@@ -1,0 +1,14 @@
+{
+  "name": "pathgen-api-root",
+  "version": "1.2.6",
+  "private": true,
+  "scripts": {
+    "start": "node api/server.mjs",
+    "install-api": "cd api && npm install",
+    "build": "npm run install-api",
+    "postinstall": "npm run install-api"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

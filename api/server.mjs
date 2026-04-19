@@ -62,13 +62,13 @@ app.use(express.json());
 app.use(loggerMiddleware); // Custom logger
 app.use(morgan('dev')); // Console logger
 
-// Origin Protection
-app.use(cloudflareOnly); // Only allow Cloudflare IPs
-app.use(rateLimitMiddleware(100, 60)); // Global "burst" protection: 100 req/min
-
 // 1. Health & Infrastructure (Public)
 app.use('/health', healthRoutes); // System Status & Self-Healing
 app.use('/metrics', metricsRoutes);
+
+// Origin Protection
+app.use(cloudflareOnly); // Only allow Cloudflare IPs
+app.use(rateLimitMiddleware(100, 60)); // Global "burst" protection: 100 req/min
 
 app.get('/', validateFirestoreKey(0), (req, res) => {
     res.type('text/plain');

@@ -78,12 +78,64 @@ All requests must include your API key either as a Bearer Token or a URL paramet
 
 ---
 
-## 📊 5. Other Endpoints
-*   `/v1/replay/parse`: Advanced parsing of Fortnite replay files including movement, scoreboard, and weapon data.
-*   `/v1/ai/coach`: AI-powered performance analysis for single matches (30 Credits).
-*   `/v1/ai/session-coach`: Tournament-style session analysis for up to 6 matches (50 Credits).
-*   `/v1/ai/opponent-scout`: Competitive scouting reports on any player via username (25 Credits).
-*   `/v1/game/news`: Live in-game news feed.
-*   `/v1/game/playlists`: Active game modes and playlist rotation.
+## 📋 5. Comprehensive API Reference (v1.2.6)
 
-*For full endpoint details and real-time testing, visit our [API Explorer](https://platform.pathgen.dev/explorer).*
+All requests require `?key=YOUR_API_KEY` or `Authorization: Bearer <JWT>`.
+
+### 🧪 Account & Billing
+| Method | Endpoint | Cost | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/v1/account/me` | Free | Full profile (balance, tier, stats) |
+| `GET` | `/v1/account/balance` | Free | Current credit balance only |
+| `GET` | `/v1/account/keys` | Free | List all active API keys |
+| `POST` | `/v1/account/keys` | Free | Generate a new RS (secure) key |
+| `DELETE` | `/v1/account/keys/{id}` | Free | Revoke an existing key |
+| `GET` | `/v1/billing/history` | Free | Transaction & top-up history |
+| `POST` | `/v1/billing/checkout` | Free | Generate Stripe Checkout for credits |
+
+### 🌍 Game World Intelligence
+| Method | Endpoint | Cost | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/v1/game/stats` | **5 Credits** | **Premium** Unified Stats (Merged FnAPI + Osirion) |
+| `GET` | `/v1/game/stats/br/v2` | 2 Credits | Standard BR stats lookup |
+| `GET` | `/v1/game/lookup` | 2 Credits | Simple player existence check |
+| `GET` | `/v1/game/ranked` | 5 Credits | Ranked history & current progression |
+| `GET` | `/v1/game/shop` | 1 Credit | Fused item shop data |
+| `GET` | `/v1/game/news` | 1 Credit | Game news & updates feed |
+| `GET` | `/v1/game/weapons` | 1 Credit | Current loot pool & weapon stats |
+| `GET` | `/v1/game/playlists`| 1 Credit | Active game modes & LTMs |
+
+### 📦 Replay & Match Analysis
+*Upload a `.replay` file via POST Multipart Form Data.*
+
+| Method | Endpoint | Cost | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/v1/replay/parse` | 20 Credits | Full match JSON payload |
+| `POST` | `/v1/replay/stats` | 5 Credits | Lightweight scoreboard & combat stats |
+| `POST` | `/v1/replay/movement` | 8 Credits | Rotation paths & coordinate logs |
+| `POST` | `/v1/replay/weapons` | 8 Credits | Weapon-by-weapon performance audit |
+| `POST` | `/v1/replay/events` | 10 Credits | Full elimination feed & timeline |
+| `POST` | `/v1/replay/rotation-score`| 25 Credits | Zone survival & storm-edge efficiency |
+| `POST` | `/v1/replay/opponents` | 30 Credits | Skill assessment of every player in lobby |
+
+### 🤖 AI Coaching & Session (Beta)
+| Method | Endpoint | Cost | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/v1/session/analyze` | 50 Credits | Multi-match session summary report |
+| `POST` | `/v1/session/auto-analyze`| 75 Credits | **Auto-fetch** tournament history from Epic |
+| `POST` | `/v1/ai/coach` | 30 Credits | Deep AI gameplay critique (Vertex AI) |
+| `POST` | `/v1/ai/weapon-coach` | 20 Credits | AI loadout optimization advice |
+| `POST` | `/v1/ai/opponent-scout` | 25 Credits | AI scouting report on rival player names |
+
+### ⚡ Enhanced Intelligence (Beta)
+| Method | Endpoint | Cost | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/v1/replay/enhanced/heatmap`| 15 Credits | Map density grid of movements/kills |
+| `POST` | `/v1/replay/enhanced/timeline`| 10 Credits | Unified event feed (Storm/Kills/Movement) |
+| `POST` | `/v1/replay/enhanced/compare` | 25 Credits | Side-by-side comparison of two replays |
+| `POST` | `/v1/replay/enhanced/clutch` | 20 Credits | Detects peak-performance clutch moments |
+
+---
+
+*For full interactive documentation, visit our [API Explorer](https://platform.pathgen.dev/explorer).*
+

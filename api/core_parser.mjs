@@ -166,6 +166,7 @@ export async function parseReplay(inputBuffer) {
   result.match_overview.placement = confirmedPlacement || v[114] || 1;
   result.match_overview.session_id = sessionID || "Unknown";
   result.match_overview.mode = matchMode;
+  result.match_overview.timestamp = headStr.match(/202[0-9]\.[0-9]{2}\.[0-9]{2}\-[0-9]{2}\.[0-9]{2}\.[0-9]{2}/)?.[0]?.replace(/\./g, '-') || new Date().toISOString();
   result.match_overview.lobby = { 
     players: (humanCount || 0) + (aiCount || 0) || 100, 
     ais: aiCount || 65, 

@@ -293,7 +293,10 @@
                     body: formData
                 });
 
-                if (!res.ok) throw new Error('Parsing failed. Replay may be corrupted.');
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.message || errData.error || 'Parsing failed. Replay may be corrupted.');
+                }
 
                 const data = await res.json();
                 

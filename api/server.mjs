@@ -29,6 +29,8 @@ import gameRoutes from './routes/game.mjs';
 import specRoutes from './routes/spec.mjs';
 import webhookRoutes from './routes/webhooks.mjs';
 import healthRoutes from './routes/health.mjs';
+import tierRoutes from './routes/tiers.mjs';
+import commercialRoutes from './routes/commercial.mjs';
 
 // Automations
 import { startDailyDigest } from './lib/daily_digest.mjs';
@@ -111,6 +113,8 @@ app.use('/v1/billing', rateLimitMiddleware(10, 60), billingRoutes);
 app.use('/v1/game', rateLimitMiddleware(60, 60), gameRoutes);
 app.use('/v1/spec', rateLimitMiddleware(2000, 60), specRoutes); // OpenAPI JSON
 app.use('/v1/webhooks', rateLimitMiddleware(2000, 60), webhookRoutes); // Developer Push Notifs
+app.use('/v1/tier', rateLimitMiddleware(10, 60), tierRoutes);
+app.use('/v1/commercial', rateLimitMiddleware(60, 60), commercialRoutes);
 app.use('/v1/epic', epicOAuthRoutes); // Epic Account Integration
 
 // Assets (Redirect to Cloudflare R2 for performance)

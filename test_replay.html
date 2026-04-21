@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pathgen JSON Viewer</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    min-height: 100vh;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .logo-group { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #4f8ef7, #a78bfa);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    color: #fff;
+  }
+  h1 { font-size: 1.1rem; color: #fff; }
+  h1 span { color: #555; }
+
+  /* Controls Card */
+  .controls {
+    background: #111118;
+    border: 1px solid #222230;
+    border-radius: 12px;
+    padding: 16px;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .file-input-wrapper {
+    position: relative;
+    background: #0a0a0f;
+    border: 1px dashed #333;
+    border-radius: 8px;
+    padding: 8px 16px;
+    flex: 1;
+    min-width: 250px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .file-input-wrapper:hover { border-color: #4f8ef7; background: rgba(79, 142, 247, 0.05); }
+  .file-input-wrapper input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .file-info { font-size: 13px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-primary { background: #4f8ef7; color: #fff; }
+  .btn-primary:hover { background: #3d7ee6; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* API Settings (Small) */
+  .api-settings { display: flex; gap: 8px; align-items: center; }
+  .input-field {
+    background: #0a0a0f;
+    border: 1px solid #222230;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #999;
+    font-size: 12px;
+    outline: none;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Main JSON Area */
+  .result-container {
+    flex: 1;
+    background: #111118;
+    border: 1px solid #222230;
+    border-radius: 16px;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .result-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid #222230;
+    background: #161620;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .result-title { font-size: 11px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.1em; }
+
+  .copy-btn {
+    background: #222230;
+    color: #aaa;
+    border: 1px solid #333;
+    padding: 6px 14px;
+    font-size: 11px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .copy-btn:hover { background: #333; color: #fff; }
+  .copy-btn.copied { background: #4ade80; color: #0a0a0f; border-color: #4ade80; }
+
+  #jsonOutput {
+    padding: 24px;
+    overflow: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #d1d5db;
+    white-space: pre-wrap;
+    word-break: break-all;
+    flex: 1;
+  }
+
+  /* Status Overlay */
+  #statusOverlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 10, 15, 0.8);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    z-index: 10;
+  }
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(79, 142, 247, 0.2);
+    border-top-color: #4f8ef7;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Highlighting */
+  .string { color: #9ecbff; }
+  .number { color: #f8c555; }
+  .boolean { color: #f97583; }
+  .null { color: #6a737d; }
+  .key { color: #79b8ff; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo-group">
+    <div class="logo">P</div>
+    <h1>Pathgen <span>/ Parser Payload</span></h1>
+  </div>
+  <div class="api-settings">
+    <input type="text" id="apiUrl" class="input-field" value="http://localhost:3000" placeholder="API URL">
+    <input type="password" id="apiKey" class="input-field" value="rs_vgyqz2jwi203htfpug" placeholder="API Key">
+  </div>
+</div>
+
+<div class="controls">
+  <div class="file-input-wrapper">
+    <input type="file" id="fileInput" accept=".replay">
+    <span id="fileNameDisplay" class="file-info">Click or drop .replay file here...</span>
+  </div>
+  <button class="btn btn-primary" id="parseBtn" onclick="runParse()">
+    <span>⚡</span> Run Parse
+  </button>
+</div>
+
+<div class="result-container">
+  <div class="result-header">
+    <div class="result-title">Raw JSON Payload</div>
+    <button class="copy-btn" id="copyBtn" onclick="copyJson()">Copy JSON</button>
+  </div>
+  
+  <div id="statusOverlay">
+    <div class="spinner"></div>
+    <div id="statusText" style="font-size: 13px; color: #4f8ef7;">Uploading & Parsing...</div>
+  </div>
+
+  <div id="jsonOutput">// Response will appear here after parsing...</div>
+</div>
+
+<script>
+let lastResult = null;
+
+const fileInput = document.getElementById('fileInput');
+const fileNameDisplay = document.getElementById('fileNameDisplay');
+
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) {
+    fileNameDisplay.textContent = e.target.files[0].name;
+    fileNameDisplay.style.color = '#4ade80';
+  }
+});
+
+async function runParse() {
+  const file = fileInput.files[0];
+  const url = document.getElementById('apiUrl').value.trim() + '/v1/replay/parse';
+  const key = document.getElementById('apiKey').value.trim();
+
+  if (!file) { alert('Please select a file.'); return; }
+
+  document.getElementById('statusOverlay').style.display = 'flex';
+  document.getElementById('parseBtn').disabled = true;
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${key}` },
+      body: formData
+    });
+
+    const data = await res.json();
+    lastResult = data;
+    
+    renderJson(data);
+  } catch (err) {
+    document.getElementById('jsonOutput').innerText = 'ERROR: ' + err.message;
+  } finally {
+    document.getElementById('statusOverlay').style.display = 'none';
+    document.getElementById('parseBtn').disabled = false;
+  }
+}
+
+function renderJson(obj) {
+  const json = JSON.stringify(obj, null, 2);
+  const highlighted = syntaxHighlight(json);
+  document.getElementById('jsonOutput').innerHTML = highlighted;
+}
+
+function syntaxHighlight(json) {
+  json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
+    let cls = 'number';
+    if (/^"/.test(match)) {
+      if (/:$/.test(match)) {
+        cls = 'key';
+      } else {
+        cls = 'string';
+      }
+    } else if (/true|false/.test(match)) {
+      cls = 'boolean';
+    } else if (/null/.test(match)) {
+      cls = 'null';
+    }
+    return '<span class="' + cls + '">' + match + '</span>';
+  });
+}
+
+function copyJson() {
+  if (!lastResult) return;
+  const text = JSON.stringify(lastResult, null, 2);
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    const originalText = btn.innerText;
+    btn.innerText = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.innerText = originalText;
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+}
+</script>
+
+</body>
+</html>

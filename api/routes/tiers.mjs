@@ -19,20 +19,13 @@ router.post('/free', upload.single('file'), async (req, res) => {
     try {
         const result = await parseReplay(req.file.buffer);
         
-        const budgetData = {
-            match_overview: result.match_overview,
-            summary: {
-                kills: result.combat_summary?.eliminations?.players || 0,
-                placement: result.match_overview?.placement || 0,
-                match_date: result.match_overview?.match_date
-            },
-            status: "success",
-            tier: "free"
-        };
+        // Return only the requested "Raw 33 Fields" for maximum speed and utility
+        const budgetData = result.raw_33;
 
         res.json({
             credits_used: 0,
-            credits_remaining: req.user?.credits || 0,
+            status: "success",
+            tier: "free",
             data: budgetData
         });
     } catch (err) {

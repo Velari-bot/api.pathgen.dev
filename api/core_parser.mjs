@@ -208,7 +208,7 @@ export async function parseReplay(inputBuffer) {
   result.movement = { 
     distance_foot_m: parseFloat(( (v[125] || 0) / 100).toFixed(1)), 
     distance_skydiving_m: parseFloat(( (v[126] || 0) / 100).toFixed(1)),
-    time_alive_ms: result.movement.time_alive_ms || 1120000
+    time_alive_ms: result.match_overview.performance_metrics.time_alive_ms || 1120000
   };
 
   // 3. Flatten for "Raw 33 Fields" if needed

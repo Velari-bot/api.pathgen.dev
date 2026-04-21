@@ -288,7 +288,7 @@
 
             try {
                 // Pointing to the live tier we just made public
-                const res = await fetch('http://localhost:3000/v1/tier/free', {
+                const res = await fetch('https://api.pathgen.dev/v1/tier/free', {
                     method: 'POST',
                     body: formData
                 });

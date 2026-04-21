@@ -11,9 +11,9 @@ const router = express.Router();
  * TIERED REPLAY PARSERS
  */
 
-// 1. FREE / BUDGET PARSER (1 Credit)
+// 1. FREE / BUDGET PARSER (Publicly Accessible)
 // Returns just the essentials. Fast and cheap.
-router.post('/free', validateFirestoreKey(1), upload.single('file'), async (req, res) => {
+router.post('/free', upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No replay file provided' });
     
     try {
@@ -31,7 +31,7 @@ router.post('/free', validateFirestoreKey(1), upload.single('file'), async (req,
         };
 
         res.json({
-            credits_used: 1,
+            credits_used: 0,
             credits_remaining: req.user?.credits || 0,
             data: budgetData
         });

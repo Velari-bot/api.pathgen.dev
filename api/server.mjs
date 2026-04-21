@@ -56,9 +56,10 @@ if (process.env.NODE_ENV !== 'development') {
 }
 
 app.use(cors({
-    origin: [/pathgen\.dev$/],
+    origin: ['http://localhost:3000', /pathgen\.dev$/],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    credentials: true
 }));
 app.use(express.json());
 app.use(loggerMiddleware); // Custom logger

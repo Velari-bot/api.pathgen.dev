@@ -1,5 +1,4 @@
 import express from 'express';
-import { parseReplay } from '../core_parser.mjs';
 import { upload } from '../middleware/upload.mjs';
 import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
 
@@ -15,6 +14,7 @@ import { recordParse } from '../lib/monitor.mjs';
 import { sendLowCreditAlert, sendParseReceiptEmail } from '../lib/email.mjs';
 import { analyzeMatch, coachMatch } from '../lib/vertex.mjs';
 import { saveMatchToFirestore } from '../lib/firebase/matches.mjs';
+import { processReplayAndUpload } from '../lib/parser_handler.mjs';
 
 const router = express.Router();
 
@@ -30,28 +30,6 @@ const wrapResponse = (req, payload, cost, storageUrl) => {
         data: payload
     };
 };
-
-const processReplayAndUpload = async (req) => {
-    // Support both 'replay' and 'file' field names for high compatibility
-    const file = req.file || (req.files ? (req.files.replay?.[0] || req.files.file?.[0]) : null);
-    if (!file) throw new Error('No replay file provided (use field "replay" or "file")');
-    
-    const result = await parseReplay(file.buffer);
-    const sessionId = result.match_overview?.session_id || `replay_${Date.now()}`;
-    const storageKey = `replays/${sessionId}.replay`;
-    
-    let storageUrl = null;
-    if (process.env.NODE_ENV !== 'development' && process.env.SKIP_R2_UPLOAD !== 'true') {
-        await r2.upload(storageKey, file.buffer, 'application/octet-stream');
-        storageUrl = `https://assets.pathgen.dev/${storageKey}`;
-    } else {
-        console.log('[R2 Skip] Skipping upload for local development');
-    }
-    
-    return { result, storageUrl };
-};
-
-
 
 router.post('/parse', validateFirestoreKey(20), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
 
@@ -71,7 +49,8 @@ router.post('/parse', validateFirestoreKey(20), upload.fields([{ name: 'replay',
         }
         
         result.parser_meta.parse_time_ms = Date.now() - start;
-        result.parser_meta.file_size_mb = (req.file.size / (1024 * 1024)).toFixed(2);
+        const file = req.file || (req.files ? (req.files.replay?.[0] || req.files.file?.[0]) : null);
+        result.parser_meta.file_size_mb = (file?.size / (1024 * 1024)).toFixed(2);
 
         // --- PHASE 2: EPIC DATA INJECTION ---
         // Fetch private Epic profile data if the user has connected their account
@@ -304,12 +283,12 @@ router.post('/rotation-score', validateFirestoreKey(25, { requireBeta: true }), 
 
         const avgScore = Math.round(totalScore / stormPhases.length);
         let grade = "D";
-        let summary = "Poor rotation — frequently caught outside zone.";
+        let summary = "Poor rotation \u2014 frequently caught outside zone.";
 
-        if (avgScore >= 90) { grade = "S"; summary = "Perfect rotation — consistently deep in zone all match."; }
-        else if (avgScore >= 75) { grade = "A"; summary = "Strong rotation — stayed inside zone with minimal exposure."; }
-        else if (avgScore >= 60) { grade = "B"; summary = "Decent rotation — caught outside zone a few times."; }
-        else if (avgScore >= 45) { grade = "C"; summary = "Rotation needs work — spending too much time in storm."; }
+        if (avgScore >= 90) { grade = "S"; summary = "Perfect rotation \u2014 consistently deep in zone all match."; }
+        else if (avgScore >= 75) { grade = "A"; summary = "Strong rotation \u2014 stayed inside zone with minimal exposure."; }
+        else if (avgScore >= 60) { grade = "B"; summary = "Decent rotation \u2014 caught outside zone a few times."; }
+        else if (avgScore >= 45) { grade = "C"; summary = "Rotation needs work \u2014 spending too much time in storm."; }
 
         res.json(wrapResponse(req, {
             session_id: result.match_overview.session_id,
@@ -348,7 +327,7 @@ router.post('/opponents', validateFirestoreKey(30), upload.fields([{ name: 'repl
 
 
 // SERVER REPLAY ENDPOINTS
-// ─────────────────────────────────────────────────
+// \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 // These endpoints download replay files directly
 // from Epic's game servers using a match ID.
 //
@@ -363,7 +342,7 @@ router.post('/opponents', validateFirestoreKey(30), upload.fields([{ name: 'repl
 //   - Custom lobbies
 //
 // Advantages over client upload:
-//   - No file upload required — fully automated
+//   - No file upload required \u2014 fully automated
 //   - Server-side data is more complete
 //   - All 100 players captured neutrally
 //   - No client-side packet drops
@@ -437,7 +416,7 @@ router.post('/match-info', validateFirestoreKey(5), async (req, res) => {
 /**
  * POST /v1/replay/download-and-parse
  * Cost: 25 credits - PRO
- * Full automation — downloads from Epic and parses
+ * Full automation \u2014 downloads from Epic and parses
  */
 router.post('/download-and-parse', validateFirestoreKey(25, { requireBeta: true }), async (req, res) => {
     const { matchId } = req.body;
@@ -466,7 +445,7 @@ router.post('/download-and-parse', validateFirestoreKey(25, { requireBeta: true 
         const downloadTime = Date.now() - downloadStart;
 
         const parseStart = Date.now();
-        const result = await parseReplay(buffer);
+        const { result, storageUrl } = await processReplayAndUpload({ file: { buffer } }); // Mock req for processReplayAndUpload
         const parseTime = Date.now() - parseStart;
 
         // Enrichment
@@ -477,12 +456,6 @@ router.post('/download-and-parse', validateFirestoreKey(25, { requireBeta: true 
                 result.epic_data = pd;
             }
         }
-
-        // Final Mirroring for R2 storage (optional, user didn't explicitly ask to upload server replays but it's good practice)
-        const sessionId = result.match_overview?.session_id || `server_${matchId}`;
-        const storageKey = `replays/${sessionId}.replay`;
-        await r2.upload(storageKey, buffer, 'application/octet-stream');
-        const storageUrl = `https://assets.pathgen.dev/${storageKey}`;
 
         const finalResult = await mirrorObjectUrls(result);
 

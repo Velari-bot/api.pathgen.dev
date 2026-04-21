@@ -1,9 +1,8 @@
 import express from 'express';
 import { upload } from '../middleware/upload.mjs';
 import { validateFirestoreKey } from '../middleware/firestore-auth.mjs';
-import { parseReplay } from '../core_parser.mjs';
-import { analyzeMatch } from '../lib/vertex.mjs'; // Assuming this exists or should exist for Pro
-import { r2 } from '../lib/r2.mjs';
+import { processReplayAndUpload } from '../lib/parser_handler.mjs';
+import { analyzeMatch } from '../lib/vertex.mjs';
 
 const router = express.Router();
 
@@ -12,12 +11,10 @@ const router = express.Router();
  */
 
 // 1. FREE / BUDGET PARSER (Publicly Accessible)
-// Returns just the essentials. Fast and cheap.
-router.post('/free', upload.single('file'), async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No replay file provided' });
-    
+// Returns just the essentials + storage link. Fast and cheap.
+router.post('/free', upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
     try {
-        const result = await parseReplay(req.file.buffer);
+        const { result, storageUrl } = await processReplayAndUpload(req);
         
         // Return only the requested "Raw 33 Fields" for maximum speed and utility
         const budgetData = result.raw_33;
@@ -26,20 +23,20 @@ router.post('/free', upload.single('file'), async (req, res) => {
             credits_used: 0,
             status: "success",
             tier: "free",
+            storage_url: storageUrl, // Requested: assets.pathgen.dev link
             data: budgetData
         });
     } catch (err) {
+        console.error('[Free Parser] Error:', err.message);
         res.status(500).json({ error: 'Free parse failed', message: err.message });
     }
 });
 
 // 2. MID-TIER PARSER (15 Credits)
 // Returns full gameplay stats, including weapons and builds.
-router.post('/mid', validateFirestoreKey(15), upload.single('file'), async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No replay file provided' });
-    
+router.post('/mid', validateFirestoreKey(15), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
     try {
-        const result = await parseReplay(req.file.buffer);
+        const { result, storageUrl } = await processReplayAndUpload(req);
         
         const midData = {
             match_overview: result.match_overview,
@@ -52,6 +49,7 @@ router.post('/mid', validateFirestoreKey(15), upload.single('file'), async (req,
         res.json({
             credits_used: 15,
             credits_remaining: req.user?.credits || 0,
+            storage_url: storageUrl,
             data: midData
         });
     } catch (err) {
@@ -62,12 +60,10 @@ router.post('/mid', validateFirestoreKey(15), upload.single('file'), async (req,
 // 3. PRO PARSER (50 Credits)
 // The Commercial Grade Parser. 
 // Includes AI Coaching, Heatmaps, and full event feeds.
-router.post('/pro', validateFirestoreKey(50), upload.single('file'), async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No replay file provided' });
-    
+router.post('/pro', validateFirestoreKey(50), upload.fields([{ name: 'replay', maxCount: 1 }, { name: 'file', maxCount: 1 }]), async (req, res) => {
     try {
         const start = Date.now();
-        const result = await parseReplay(req.file.buffer);
+        const { result, storageUrl } = await processReplayAndUpload(req);
         
         // --- PRO EXCLUSIVES ---
         
@@ -103,6 +99,7 @@ router.post('/pro', validateFirestoreKey(50), upload.single('file'), async (req,
         res.json({
             credits_used: 50,
             credits_remaining: req.user?.credits || 0,
+            storage_url: storageUrl,
             data: proData
         });
     } catch (err) {

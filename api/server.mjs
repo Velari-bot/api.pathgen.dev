@@ -56,7 +56,7 @@ if (process.env.NODE_ENV !== 'development') {
 }
 
 app.use(cors({
-    origin: ['http://localhost:3000', /pathgen\.dev$/],
+    origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5500', 'http://127.0.0.1:5501', /pathgen\.dev$/],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     credentials: true
